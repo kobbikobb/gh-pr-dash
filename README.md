@@ -6,17 +6,14 @@ No LLM, no config, no state — deterministic. Same input, same output. Ships as
 
 ```
 Needs action (CI fail / conflict)
-  ✗ conflict ·         1d  api#1008  extract idle watchdog into run-watchdog
-  ✗ clean    review    2d  api#12442 map user_id from transactions to goaml (1)
+  ✗ conflict ·         1d api#1008  extract idle watchdog into run-watchdog       https://github.com/me/api/pull/1008
+  ✗ clean    review    2d api#12442 map user_id from transactions to goaml (1)    https://github.com/me/api/pull/12442
 
 Ready to merge
-  ✓ clean    approved  2d  api#12385 Validate regulator config on save (1)
-
-Waiting on review
-  ✓ clean    review    2d  api#12423 Replace getMany with internal endpoint (1)
+  ✓ clean    approved  2d api#12385 Validate regulator config on save (1)         https://github.com/me/api/pull/12385
 ```
 
-Columns: **CI** (✓ pass / ✗ fail / • pending / · none), **merge** (clean / conflict / unknown), **review** (approved / changes / review / none), **idle** (days since last update), the PR ref (a clickable link in supporting terminals), and the title (with comment count).
+Columns: **CI** (✓ pass / ✗ fail / • pending / · none), **merge** (clean / conflict / unknown), **review** (approved / changes / review / none), **idle** (days since last update), the PR ref, the title (with comment count), and the full PR URL. The URL is plain text so it stays cmd-clickable everywhere — including inside tmux, where OSC-8 hyperlinks don't reliably pass through.
 
 ## Install
 

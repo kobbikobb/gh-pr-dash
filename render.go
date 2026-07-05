@@ -96,14 +96,6 @@ func reviewText(code string) string {
 	return code
 }
 
-// link wraps text in an OSC-8 terminal hyperlink when enabled.
-func link(text, url string, on bool) string {
-	if !on {
-		return text
-	}
-	return "\033]8;;" + url + "\033\\" + text + "\033]8;;\033\\"
-}
-
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
 func renderTerminal(rows []Row, width int, color bool) string {
@@ -112,15 +104,18 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	}
 	p := colors(color)
 
-	refW := 0
+	refW, urlW := 0, 0
 	for _, r := range rows {
 		if n := len([]rune(r.Ref)); n > refW {
 			refW = n
 		}
+		if n := len([]rune(r.URL)); n > urlW {
+			urlW = n
+		}
 	}
 
-	// fixed = indent + ci + merge(8) + review(8) + idle(4) + ref + single spaces
-	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 + refW + 1)
+	// fixed = indent + ci + merge(8) + review(8) + idle(4) + ref + url + spaces
+	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 + refW + 2 + urlW + 1)
 	if budget < 20 {
 		budget = 20
 	}
@@ -137,16 +132,19 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
 		}
 
-		title := truncate(r.Title, budget)
+		title := r.Title
 		if r.Comments > 0 {
-			title += " " + p.d + "(" + strconv.Itoa(r.Comments) + ")" + p.z
+			title += " (" + strconv.Itoa(r.Comments) + ")"
 		}
+		title = truncate(title, budget)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
-		ref := p.c + link(padRight(r.Ref, refW), r.URL, color) + p.z
+		ref := p.c + padRight(r.Ref, refW) + p.z
+		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s %s\n", ciGlyph(r.CI, p), merge, review, idle, ref, title)
+		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
+			ciGlyph(r.CI, p), merge, review, idle, ref, padRight(title, budget), url)
 	}
 	return b.String()
 }

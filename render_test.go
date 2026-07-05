@@ -40,8 +40,8 @@ func TestPad(t *testing.T) {
 
 func TestRenderTerminal(t *testing.T) {
 	rows := []Row{
-		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "u"},
-		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "u", Comments: 3},
+		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "https://github.com/me/glint/pull/20"},
+		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "https://github.com/me/api/pull/5", Comments: 3},
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
@@ -57,6 +57,14 @@ func TestRenderTerminal(t *testing.T) {
 
 		if !strings.Contains(out, "(3)") {
 			t.Errorf("missing comment count:\n%s", out)
+		}
+	})
+
+	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
+		out := renderTerminal(rows, 200, false)
+
+		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
+			t.Errorf("missing PR url:\n%s", out)
 		}
 	})
 
