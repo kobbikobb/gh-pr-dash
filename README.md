@@ -2,21 +2,21 @@
 
 A [GitHub CLI](https://cli.github.com) extension that lists **all your open pull requests across every repo**, ranked by what needs your action.
 
-No LLM, no config, no state — a deterministic pipeline over `gh` + `jq`. Same input, same output.
+No LLM, no config, no state — deterministic. Same input, same output. Ships as a single precompiled binary, so there's nothing else to install.
 
 ```
-## 🔴 Needs action (CI fail / conflict)
-| PR | Title | CI | Merge | Review | Idle | 💬 | URL |
-|---|---|---|---|---|---|---|---|
-| app#20   | Google Calendar OAuth   | ❌ | clean       | —         | 13d | 0 | … |
-| api#1008 | extract idle watchdog   | ❌ | ❌ conflict | —         | 1d  | 0 | … |
+Needs action (CI fail / conflict)
+  ✗ conflict ·         1d  api#1008  extract idle watchdog into run-watchdog
+  ✗ clean    review    2d  api#12442 map user_id from transactions to goaml (1)
 
-## 🟢 Ready to merge
-| api#12385 | Validate regulator config | ✅ | clean | ✅ approved | 2d | 1 | … |
+Ready to merge
+  ✓ clean    approved  2d  api#12385 Validate regulator config on save (1)
 
-## 🟡 Waiting on review
-| api#12423 | Replace getMany endpoint  | ✅ | clean | 🔶 review   | 2d | 1 | … |
+Waiting on review
+  ✓ clean    review    2d  api#12423 Replace getMany with internal endpoint (1)
 ```
+
+Columns: **CI** (✓ pass / ✗ fail / • pending / · none), **merge** (clean / conflict / unknown), **review** (approved / changes / review / none), **idle** (days since last update), the PR ref (a clickable link in supporting terminals), and the title (with comment count).
 
 ## Install
 
@@ -24,15 +24,19 @@ No LLM, no config, no state — a deterministic pipeline over `gh` + `jq`. Same 
 gh extension install kobbikobb/gh-pr-dash
 ```
 
+Upgrade with `gh extension upgrade pr-dash`.
+
 ## Usage
 
 ```bash
 gh pr-dash                    # all your open PRs, ranked
 gh pr-dash --org my-org       # scope to one org/owner
 gh pr-dash --json             # raw JSON rows (for scripts)
-gh pr-dash --no-emoji         # plain text status
+gh pr-dash --no-color         # plain text, no ANSI / hyperlinks
 gh pr-dash 50                 # cap at 50 PRs (default 100)
 ```
+
+Color and hyperlinks are enabled automatically when writing to a terminal and disabled when piped or when `NO_COLOR` is set.
 
 ## How PRs are ranked
 
@@ -40,20 +44,27 @@ Four tiers, oldest-first within each:
 
 | Tier | Meaning |
 |---|---|
-| 🔴 **Needs action** | CI failing **or** merge conflict |
-| 🟢 **Ready to merge** | approved, CI green, no conflicts |
-| 🟡 **Waiting on review** | everything else that's open |
-| ⚪ **Drafts** | draft PRs |
+| **Needs action** | CI failing **or** merge conflict |
+| **Ready to merge** | approved, CI green, no conflicts |
+| **Waiting on review** | everything else that's open |
+| **Drafts** | draft PRs |
 
-Columns: **CI** (rolled-up check state), **Merge** (mergeable / conflict), **Review** (approved / changes / review-required), **Idle** (days since last update), **💬** (comment count).
-
-Review status also honors a standing approval or changes-request in `latestReviews`, since `reviewDecision` is empty in repos that don't *require* review.
+Review status honors a standing approval or changes-request as well as the repo's `reviewDecision`, since `reviewDecision` is empty in repos that don't *require* review.
 
 ## Requirements
 
-- [`gh`](https://cli.github.com) (authenticated: `gh auth login`)
-- [`jq`](https://jqlang.github.io/jq/)
-- `bash`, `awk`, `xargs` (standard on macOS/Linux)
+- [`gh`](https://cli.github.com), authenticated (`gh auth login`). The extension reuses gh's auth — no token setup.
+
+## Development
+
+```bash
+make build     # build ./gh-pr-dash
+make test      # go test ./...
+make lint      # gofmt check + go vet
+make install   # build and install as a local gh extension
+```
+
+CI runs gofmt, `go vet`, build, tests, and golangci-lint on every push and PR. Tagging `vX.Y.Z` builds cross-platform release binaries via [`cli/gh-extension-precompile`](https://github.com/cli/gh-extension-precompile).
 
 ## License
 
