@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# List all your open PRs across every repo, ranked by what needs your action.
+# Emits a Markdown table (or JSON with --json), grouped into tiers:
+# needs-action (CI fail / conflict) -> ready -> waiting -> draft, oldest-first within each tier.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+gh pr-dash — rank your open PRs by what needs action
+
+Usage: gh pr-dash [--org <name>] [--json] [--no-emoji] [max]
+
+  --org <name>   Scope to a single org/owner
+  --json         Emit raw JSON rows instead of a Markdown table
+  --no-emoji     Use plain text (ok/fail/pending) instead of emoji
+  max            Max PRs to fetch (default 100)
+EOF
+}
+
+org=""; limit=100; as_json=0; emoji=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --org) org="${2:-}"; shift 2 ;;
+    --json) as_json=1; shift ;;
+    --no-emoji) emoji=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) limit="$1"; shift ;;
+  esac
+done
+
+[ "$as_json" -eq 1 ] && emoji=0
+
+command -v gh >/dev/null || { echo "error: gh CLI not found" >&2; exit 1; }
+command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
+
+prs=$(gh search prs --author "@me" --state open ${org:+--owner "$org"} \
+  --json repository,number --limit "$limit" \
+  | jq -r '.[] | "\(.repository.nameWithOwner)\t\(.number)"')
+[ -z "$prs" ] && { [ "$as_json" -eq 1 ] && echo "[]" || echo "_No open PRs._"; exit 0; }
+
+if [ "$emoji" -eq 1 ]; then
+  CI_OK="✅"; CI_FAIL="❌"; CI_PEND="🟡"; CI_NONE="—"
+  M_CONFLICT="❌ conflict"; M_CLEAN="clean"; M_UNK="⚠️ unknown"
+  R_CHANGES="🔴 changes"; R_APPROVED="✅ approved"; R_REVIEW="🔶 review"; R_NONE="—"
+else
+  CI_OK="ok"; CI_FAIL="fail"; CI_PEND="pending"; CI_NONE="-"
+  M_CONFLICT="conflict"; M_CLEAN="clean"; M_UNK="unknown"
+  R_CHANGES="changes"; R_APPROVED="approved"; R_REVIEW="review"; R_NONE="-"
+fi
+
+row(){
+  gh pr view "$2" -R "$1" --json title,url,isDraft,reviewDecision,latestReviews,mergeable,statusCheckRollup,updatedAt,comments 2>/dev/null \
+  | jq -r --arg repo "${1#*/}" --arg num "$2" \
+    --arg ci_ok "$CI_OK" --arg ci_fail "$CI_FAIL" --arg ci_pend "$CI_PEND" --arg ci_none "$CI_NONE" \
+    --arg m_conflict "$M_CONFLICT" --arg m_clean "$M_CLEAN" --arg m_unk "$M_UNK" \
+    --arg r_changes "$R_CHANGES" --arg r_approved "$R_APPROVED" --arg r_review "$R_REVIEW" --arg r_none "$R_NONE" '
+    def ci:
+      ([.statusCheckRollup[]?|(.conclusion//.state//"")]|map(select(.!=""))) as $s
+      | if ($s|length)==0 then $ci_none
+        elif ($s|any(.=="FAILURE" or .=="ERROR" or .=="TIMED_OUT" or .=="ACTION_REQUIRED")) then $ci_fail
+        elif ($s|any(.=="PENDING" or .=="IN_PROGRESS" or .=="QUEUED" or .=="EXPECTED")) then $ci_pend
+        else $ci_ok end;
+    # reviewDecision is empty when the repo does not *require* review, so also honor a
+    # standing approval in latestReviews (and a standing changes-request).
+    (any(.latestReviews[]?; .state=="APPROVED")) as $approved |
+    (any(.latestReviews[]?; .state=="CHANGES_REQUESTED")) as $changes |
+    def merge:
+      if .mergeable=="CONFLICTING" then $m_conflict
+      elif .mergeable=="MERGEABLE" then $m_clean
+      else $m_unk end;
+    def rev:
+      if .isDraft then $r_none
+      elif .reviewDecision=="CHANGES_REQUESTED" or $changes then $r_changes
+      elif .reviewDecision=="APPROVED" or $approved then $r_approved
+      elif .reviewDecision=="REVIEW_REQUIRED" then $r_review
+      else $r_none end;
+    (ci) as $ci | (.mergeable) as $m |
+    (if .isDraft then 3
+     elif $ci==$ci_fail or $m=="CONFLICTING" then 0
+     elif (.reviewDecision=="APPROVED" or $approved) and ($changes|not) and $ci==$ci_ok and $m=="MERGEABLE" then 1
+     else 2 end) as $tier |
+    ((now-(.updatedAt|fromdateiso8601))/86400|floor) as $idle |
+    [ ($tier|tostring), ((9999-$idle)|tostring), ($idle|tostring),
+      $ci, merge, rev, ($repo+"#"+$num), .url, (.comments|length|tostring), .title ]|@tsv';
+}
+export -f row
+export CI_OK CI_FAIL CI_PEND CI_NONE M_CONFLICT M_CLEAN M_UNK R_CHANGES R_APPROVED R_REVIEW R_NONE
+
+rows=$(echo "$prs" | xargs -P 8 -n2 bash -c 'row "$0" "$1"' | sort -t$'\t' -k1,1n -k2,2n)
+
+if [ "$as_json" -eq 1 ]; then
+  echo "$rows" | jq -R -s -c 'split("\n")|map(select(length>0)|split("\t")|{
+    tier:(.[0]|tonumber), idle_days:(.[2]|tonumber), ci:.[3], merge:.[4],
+    review:.[5], pr:.[6], url:.[7], comments:(.[8]|tonumber), title:.[9]})'
+  exit 0
+fi
+
+echo "$rows" | awk -F'\t' -v e="$emoji" '
+  function flush(){ if(open){print ""}; open=0 }
+  BEGIN{
+    if(e) split("🔴 Needs action (CI fail / conflict)|🟢 Ready to merge|🟡 Waiting on review|⚪ Drafts",H,"|");
+    else  split("Needs action (CI fail / conflict)|Ready to merge|Waiting on review|Drafts",H,"|");
+    c = e ? "💬" : "comments"; t=-1 }
+  $1!=t{ flush(); t=$1; print "## " H[t+1];
+         printf "| PR | Title | CI | Merge | Review | Idle | %s | URL |\n", c;
+         print "|---|---|---|---|---|---|---|---|"; open=1 }
+  { printf "| %s | %s | %s | %s | %s | %sd | %s | %s |\n", $7,$10,$4,$5,$6,$3,$9,$8 }
+  END{ flush() }'
