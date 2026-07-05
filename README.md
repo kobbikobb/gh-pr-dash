@@ -62,6 +62,7 @@ make build     # build ./gh-pr-dash
 make test      # go test ./...
 make lint      # gofmt check + go vet
 make install   # build and install as a local gh extension
+make uninstall # remove the local gh extension
 ```
 
 CI runs gofmt, `go vet`, build, tests, and golangci-lint on every push and PR. Tagging `vX.Y.Z` builds cross-platform release binaries via [`cli/gh-extension-precompile`](https://github.com/cli/gh-extension-precompile).

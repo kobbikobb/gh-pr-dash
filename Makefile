@@ -1,6 +1,6 @@
 BINARY := gh-pr-dash
 
-.PHONY: build test lint fmt install clean
+.PHONY: build test lint fmt install uninstall clean
 
 build:
 	go build -o $(BINARY) .
@@ -17,6 +17,9 @@ fmt:
 
 install: build
 	gh extension install .
+
+uninstall:
+	gh extension remove pr-dash
 
 clean:
 	rm -f $(BINARY)
