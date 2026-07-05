@@ -15,11 +15,10 @@ import (
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--json] [--no-color] [max]
+Usage: gh pr-dash [--org <name>] [--json] [max]
 
   --org <name>   Scope to a single org/owner
   --json         Emit raw JSON rows (for scripts)
-  --no-color     Disable ANSI color and hyperlinks
   max            Max PRs to fetch (default 100)
 `
 
@@ -38,10 +37,9 @@ const searchQuery = `query($q:String!,$n:Int!){
 }`
 
 type options struct {
-	org     string
-	limit   int
-	asJSON  bool
-	noColor bool
+	org    string
+	limit  int
+	asJSON bool
 }
 
 func parseArgs(args []string) (options, bool) {
@@ -54,8 +52,6 @@ func parseArgs(args []string) (options, bool) {
 			}
 		case "--json":
 			o.asJSON = true
-		case "--no-color":
-			o.noColor = true
 		case "-h", "--help":
 			return o, false
 		default:
@@ -107,7 +103,7 @@ func main() {
 	}
 
 	fd := int(os.Stdout.Fd())
-	useColor := !opts.noColor && os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
+	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
 	width := 120
 	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
 		width = w

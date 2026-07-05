@@ -104,18 +104,15 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	}
 	p := colors(color)
 
-	refW, urlW := 0, 0
+	urlW := 0
 	for _, r := range rows {
-		if n := len([]rune(r.Ref)); n > refW {
-			refW = n
-		}
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
 	}
 
-	// fixed = indent + ci + merge(8) + review(8) + idle(4) + ref + url + spaces
-	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 + refW + 2 + urlW + 1)
+	// fixed = indent + ci + merge(8) + review(8) + idle(4) + url + spaces
+	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 2 + urlW)
 	if budget < 20 {
 		budget = 20
 	}
@@ -140,11 +137,10 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
-		ref := p.c + padRight(r.Ref, refW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, ref, padRight(title, budget), url)
+		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
+			ciGlyph(r.CI, p), merge, review, idle, padRight(title, budget), url)
 	}
 	return b.String()
 }
