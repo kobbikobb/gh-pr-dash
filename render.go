@@ -104,23 +104,38 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	}
 	p := colors(color)
 
-	urlW := 0
-	for _, r := range rows {
+	// Title column is as wide as the longest title, but no wider than the space
+	// left once the fixed columns and the URL are accounted for — so the URL sits
+	// right after the titles rather than flush against a (possibly mis-detected)
+	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
+	const prefixW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	longest, urlW := 0, 0
+	titles := make([]string, len(rows))
+	for i, r := range rows {
+		t := r.Title
+		if r.Comments > 0 {
+			t += " (" + strconv.Itoa(r.Comments) + ")"
+		}
+		titles[i] = t
+		if n := len([]rune(t)); n > longest {
+			longest = n
+		}
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
 	}
-
-	// fixed = indent + ci + merge(8) + review(8) + idle(4) + url + spaces
-	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 2 + urlW)
-	if budget < 20 {
-		budget = 20
+	titleW := width - prefixW - 2 - urlW
+	if titleW > longest {
+		titleW = longest
+	}
+	if titleW < 12 {
+		titleW = 12
 	}
 
 	headColor := []string{p.r, p.g, p.y, p.d}
 	var b strings.Builder
 	tier := -1
-	for _, r := range rows {
+	for i, r := range rows {
 		if r.Tier != tier {
 			if tier != -1 {
 				b.WriteString("\n")
@@ -129,18 +144,14 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
 		}
 
-		title := r.Title
-		if r.Comments > 0 {
-			title += " (" + strconv.Itoa(r.Comments) + ")"
-		}
-		title = truncate(title, budget)
+		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
 		url := p.d + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, padRight(title, budget), url)
+			ciGlyph(r.CI, p), merge, review, idle, title, url)
 	}
 	return b.String()
 }
