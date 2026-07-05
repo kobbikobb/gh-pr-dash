@@ -1,0 +1,150 @@
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+var tierNames = []string{
+	"Needs action (CI fail / conflict)",
+	"Ready to merge",
+	"Waiting on review",
+	"Drafts",
+}
+
+type palette struct{ b, d, r, g, y, c, z string }
+
+func colors(on bool) palette {
+	if !on {
+		return palette{}
+	}
+	return palette{
+		b: "\033[1m", d: "\033[2m", r: "\033[31m",
+		g: "\033[32m", y: "\033[33m", c: "\033[36m", z: "\033[0m",
+	}
+}
+
+// truncate and the pad helpers count runes, not bytes, so multibyte titles
+// never get sliced mid-character.
+func truncate(s string, w int) string {
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	if w <= 1 {
+		return string(r[:max(w, 0)])
+	}
+	return string(r[:w-1]) + "…"
+}
+
+func padRight(s string, w int) string {
+	if n := w - len([]rune(s)); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
+}
+
+func padLeft(s string, w int) string {
+	if n := w - len([]rune(s)); n > 0 {
+		return strings.Repeat(" ", n) + s
+	}
+	return s
+}
+
+func ciGlyph(code string, p palette) string {
+	switch code {
+	case "ok":
+		return p.g + "✓" + p.z
+	case "fail":
+		return p.r + "✗" + p.z
+	case "pending":
+		return p.y + "•" + p.z
+	default:
+		return p.d + "·" + p.z
+	}
+}
+
+func mergeColor(code string, p palette) string {
+	switch code {
+	case "conflict":
+		return p.r
+	case "unknown":
+		return p.y
+	default:
+		return p.d
+	}
+}
+
+func reviewColor(code string, p palette) string {
+	switch code {
+	case "approved":
+		return p.g
+	case "changes":
+		return p.r
+	case "review":
+		return p.y
+	default:
+		return p.d
+	}
+}
+
+func reviewText(code string) string {
+	if code == "none" {
+		return "·"
+	}
+	return code
+}
+
+// renderTerminal produces the aligned, grouped table. Padding is applied to the
+// plain text before color so ANSI escapes never throw off column widths.
+func renderTerminal(rows []Row, width int, color bool) string {
+	if len(rows) == 0 {
+		return "No open PRs.\n"
+	}
+	p := colors(color)
+
+	refW, urlW := 0, 0
+	for _, r := range rows {
+		if n := len([]rune(r.Ref)); n > refW {
+			refW = n
+		}
+		if n := len([]rune(r.URL)); n > urlW {
+			urlW = n
+		}
+	}
+
+	// fixed = indent + ci + merge(8) + review(8) + idle(4) + ref + url + spaces
+	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 + refW + 2 + urlW + 1)
+	if budget < 20 {
+		budget = 20
+	}
+
+	headColor := []string{p.r, p.g, p.y, p.d}
+	var b strings.Builder
+	tier := -1
+	for _, r := range rows {
+		if r.Tier != tier {
+			if tier != -1 {
+				b.WriteString("\n")
+			}
+			tier = r.Tier
+			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
+		}
+
+		title := r.Title
+		if r.Comments > 0 {
+			title += " (" + strconv.Itoa(r.Comments) + ")"
+		}
+		title = truncate(title, budget)
+		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
+		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
+		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
+		ref := p.c + padRight(r.Ref, refW) + p.z
+		url := p.d + r.URL + p.z
+
+		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
+			ciGlyph(r.CI, p), merge, review, idle, ref, padRight(title, budget), url)
+	}
+	return b.String()
+}
