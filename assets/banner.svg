@@ -11,13 +11,16 @@
   <text x="28" y="78" font-size="15">
     <tspan fill="#e6edf3" font-weight="bold">Needs action </tspan><tspan fill="#8b949e">(CI fail / conflict)</tspan>
   </text>
-  <text x="40" y="104" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#f85149"> conflict</tspan><tspan fill="#8b949e">  ·   </tspan><tspan fill="#d29922"> 1d</tspan><tspan fill="#58a6ff">  api#1008  </tspan><tspan fill="#e6edf3">extract idle watchdog</tspan></text>
-  <text x="40" y="126" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#d29922"> review</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#58a6ff">  api#12442 </tspan><tspan fill="#e6edf3">map user_id to goaml</tspan></text>
+  <text x="40" y="104" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#f85149"> conflict</tspan><tspan fill="#8b949e">  ·   </tspan><tspan fill="#d29922"> 1d</tspan><tspan fill="#e6edf3">  extract idle watchdog</tspan></text>
+  <text x="512" y="104" font-size="14.5" fill="#8b949e">github.com/me/api/pull/1008</text>
+  <text x="40" y="126" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#d29922"> review</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#e6edf3">  map user_id to goaml</tspan></text>
+  <text x="512" y="126" font-size="14.5" fill="#8b949e">github.com/me/api/pull/12442</text>
 
   <text x="28" y="158" font-size="15">
     <tspan fill="#e6edf3" font-weight="bold">Ready to merge</tspan>
   </text>
-  <text x="40" y="184" font-size="14.5" xml:space="preserve"><tspan fill="#3fb950">✓</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#3fb950"> approved</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#58a6ff">  api#12385 </tspan><tspan fill="#e6edf3">validate config on save</tspan></text>
+  <text x="40" y="184" font-size="14.5" xml:space="preserve"><tspan fill="#3fb950">✓</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#3fb950"> approved</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#e6edf3">  validate config on save</tspan></text>
+  <text x="512" y="184" font-size="14.5" fill="#8b949e">github.com/me/api/pull/12385</text>
 
   <text x="28" y="220" font-size="13" fill="#8b949e">all your open PRs, ranked by what needs your action</text>
 </svg>
