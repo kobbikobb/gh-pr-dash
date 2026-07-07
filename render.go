@@ -15,7 +15,7 @@ var tierNames = []string{
 	"Recently merged — last 24h",
 }
 
-type palette struct{ b, d, r, g, y, c, z string }
+type palette struct{ b, d, r, g, y, c, u, m, z string }
 
 func colors(on bool) palette {
 	if !on {
@@ -23,7 +23,8 @@ func colors(on bool) palette {
 	}
 	return palette{
 		b: "\033[1m", d: "\033[2m", r: "\033[31m",
-		g: "\033[32m", y: "\033[33m", c: "\033[36m", z: "\033[0m",
+		g: "\033[32m", y: "\033[33m", c: "\033[36m",
+		u: "\033[34m", m: "\033[35m", z: "\033[0m",
 	}
 }
 
@@ -130,8 +131,8 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
-	longest, urlW := 0, 0
+	const fixedW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	longest, urlW, repoW := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
 		t := r.Title
@@ -145,7 +146,11 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
+		if n := len([]rune(r.Repository)); n > repoW {
+			repoW = n
+		}
 	}
+	prefixW := fixedW + repoW + 1 // repo column + spaces
 	titleW := width - prefixW - 2 - urlW
 	if titleW > longest {
 		titleW = longest
@@ -178,8 +183,8 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
-		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
-		url := p.d + r.URL + p.z
+		repo := p.u + padRight(truncate(r.Repository, repoW), repoW) + p.z
+		url := p.m + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
