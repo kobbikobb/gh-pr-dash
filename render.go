@@ -13,15 +13,13 @@ var tierNames = []string{
 	"Drafts",
 }
 
-type palette struct{ b, d, r, g, y, c, z string }
+type palette struct{ b, d, r, g, y, c, u, m, z string }
 
-func colors(on bool) palette {
-	if !on {
-		return palette{}
-	}
+func colors() palette {
 	return palette{
 		b: "\033[1m", d: "\033[2m", r: "\033[31m",
-		g: "\033[32m", y: "\033[33m", c: "\033[36m", z: "\033[0m",
+		g: "\033[32m", y: "\033[33m", c: "\033[36m",
+		u: "\033[34m", m: "\033[35m", z: "\033[0m",
 	}
 }
 
@@ -98,32 +96,48 @@ func reviewText(code string) string {
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int, color bool) string {
+func renderTerminal(rows []Row, width int) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
-	p := colors(color)
+	p := colors()
 
-	refW, urlW := 0, 0
-	for _, r := range rows {
-		if n := len([]rune(r.Ref)); n > refW {
-			refW = n
+	// Title column is as wide as the longest title, but no wider than the space
+	// left once the fixed columns and the URL are accounted for — so the URL sits
+	// right after the titles rather than flush against a (possibly mis-detected)
+	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
+	const fixedW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	longest, urlW, repoW := 0, 0, 0
+	titles := make([]string, len(rows))
+	for i, r := range rows {
+		t := r.Title
+		if r.Comments > 0 {
+			t += " (" + strconv.Itoa(r.Comments) + ")"
+		}
+		titles[i] = t
+		if n := len([]rune(t)); n > longest {
+			longest = n
 		}
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
+		if n := len([]rune(r.Repo)); n > repoW {
+			repoW = n
+		}
 	}
-
-	// fixed = indent + ci + merge(8) + review(8) + idle(4) + ref + url + spaces
-	budget := width - (2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 + refW + 2 + urlW + 1)
-	if budget < 20 {
-		budget = 20
+	prefixW := fixedW + repoW + 1 // repo column + spaces
+	titleW := width - prefixW - 2 - urlW
+	if titleW > longest {
+		titleW = longest
+	}
+	if titleW < 12 {
+		titleW = 12
 	}
 
 	headColor := []string{p.r, p.g, p.y, p.d}
 	var b strings.Builder
 	tier := -1
-	for _, r := range rows {
+	for i, r := range rows {
 		if r.Tier != tier {
 			if tier != -1 {
 				b.WriteString("\n")
@@ -132,19 +146,15 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
 		}
 
-		title := r.Title
-		if r.Comments > 0 {
-			title += " (" + strconv.Itoa(r.Comments) + ")"
-		}
-		title = truncate(title, budget)
+		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
-		ref := p.c + padRight(r.Ref, refW) + p.z
-		url := p.d + r.URL + p.z
+		repo := p.u + padRight(truncate(r.Repo, repoW), repoW) + p.z
+		url := p.m + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, ref, padRight(title, budget), url)
+			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
 	}
 	return b.String()
 }

@@ -40,12 +40,12 @@ func TestPad(t *testing.T) {
 
 func TestRenderTerminal(t *testing.T) {
 	rows := []Row{
-		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "https://github.com/me/glint/pull/20"},
-		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "https://github.com/me/api/pull/5", Comments: 3},
+		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", Repo: "glint", URL: "https://github.com/me/glint/pull/20"},
+		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", Repo: "api", URL: "https://github.com/me/api/pull/5", Comments: 3},
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
+		out := renderTerminal(rows, 100)
 
 		if !strings.Contains(out, "Needs action") || !strings.Contains(out, "Ready to merge") {
 			t.Errorf("missing tier headings:\n%s", out)
@@ -53,7 +53,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show comment count when nonzero", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
+		out := renderTerminal(rows, 100)
 
 		if !strings.Contains(out, "(3)") {
 			t.Errorf("missing comment count:\n%s", out)
@@ -61,31 +61,23 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
-		out := renderTerminal(rows, 200, false)
+		out := renderTerminal(rows, 200)
 
 		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
 			t.Errorf("missing PR url:\n%s", out)
 		}
 	})
 
-	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
-
-		if strings.Contains(out, "\033") {
-			t.Errorf("found ANSI escape with color off:\n%q", out)
-		}
-	})
-
-	t.Run("should emit ANSI escapes when color is on", func(t *testing.T) {
-		out := renderTerminal(rows, 100, true)
+	t.Run("should emit ANSI escapes", func(t *testing.T) {
+		out := renderTerminal(rows, 100)
 
 		if !strings.Contains(out, "\033[") {
-			t.Error("expected ANSI escapes with color on")
+			t.Error("expected ANSI escapes")
 		}
 	})
 
 	t.Run("should report empty state", func(t *testing.T) {
-		if got := renderTerminal(nil, 100, false); !strings.Contains(got, "No open PRs") {
+		if got := renderTerminal(nil, 100); !strings.Contains(got, "No open PRs") {
 			t.Errorf("got %q", got)
 		}
 	})

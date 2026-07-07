@@ -2,10 +2,7 @@ module github.com/kobbikobb/gh-pr-dash
 
 go 1.24
 
-require (
-	github.com/cli/go-gh/v2 v2.12.1
-	golang.org/x/term v0.30.0
-)
+require github.com/cli/go-gh/v2 v2.12.1
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -19,6 +16,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/thlib/go-timezone-local v0.0.0-20210907160436-ef149e42d28e // indirect
 	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -44,6 +44,7 @@ type Row struct {
 	Merge    string `json:"merge"`
 	Review   string `json:"review"`
 	Ref      string `json:"pr"`
+	Repo     string `json:"repo"`
 	URL      string `json:"url"`
 	Comments int    `json:"comments"`
 	Title    string `json:"title"`
@@ -125,7 +126,7 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 		return tierDrafts
 	case ci == "fail" || merge == "conflict":
 		return tierNeedsAction
-	case review == "approved" && ci == "ok" && merge == "clean":
+	case review == "approved":
 		return tierReady
 	default:
 		return tierWaiting
@@ -137,9 +138,10 @@ func classify(pr ghPR, now time.Time) Row {
 	merge := mergeCode(pr.Mergeable)
 	review := reviewCode(pr)
 
-	short := pr.Repository.NameWithOwner
-	if i := strings.Index(short, "/"); i >= 0 {
-		short = short[i+1:]
+	name := pr.Repository.NameWithOwner
+	repo := name
+	if i := strings.Index(repo, "/"); i >= 0 {
+		repo = repo[i+1:]
 	}
 
 	return Row{
@@ -148,7 +150,8 @@ func classify(pr ghPR, now time.Time) Row {
 		CI:       ci,
 		Merge:    merge,
 		Review:   review,
-		Ref:      short + "#" + strconv.Itoa(pr.Number),
+		Ref:      repo + "#" + strconv.Itoa(pr.Number),
+		Repo:     repo,
 		URL:      pr.URL,
 		Comments: pr.Comments.TotalCount,
 		Title:    pr.Title,

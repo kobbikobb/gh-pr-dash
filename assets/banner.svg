@@ -1,23 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="240" viewBox="0 0 820 240" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">
-  <rect x="1" y="1" width="818" height="238" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="710" height="240" viewBox="0 0 710 240" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">
+  <rect x="1" y="1" width="708" height="238" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
 
-  <rect x="1" y="1" width="818" height="40" rx="12" fill="#161b22"/>
-  <rect x="1" y="28" width="818" height="13" fill="#161b22"/>
+  <rect x="1" y="1" width="708" height="40" rx="12" fill="#161b22"/>
+  <rect x="1" y="28" width="708" height="13" fill="#161b22"/>
   <circle cx="24" cy="21" r="6" fill="#f85149"/>
   <circle cx="44" cy="21" r="6" fill="#d29922"/>
   <circle cx="64" cy="21" r="6" fill="#3fb950"/>
-  <text x="410" y="26" fill="#8b949e" font-size="13" text-anchor="middle">gh pr-dash</text>
+  <text x="360" y="26" fill="#8b949e" font-size="13" text-anchor="middle">gh pr-dash</text>
 
   <text x="28" y="78" font-size="15">
     <tspan fill="#e6edf3" font-weight="bold">Needs action </tspan><tspan fill="#8b949e">(CI fail / conflict)</tspan>
   </text>
-  <text x="40" y="104" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#f85149"> conflict</tspan><tspan fill="#8b949e">  ·   </tspan><tspan fill="#d29922"> 1d</tspan><tspan fill="#58a6ff">  api#1008  </tspan><tspan fill="#e6edf3">extract idle watchdog</tspan></text>
-  <text x="40" y="126" font-size="14.5" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#d29922"> review</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#58a6ff">  api#12442 </tspan><tspan fill="#e6edf3">map user_id to goaml</tspan></text>
+  <text x="40" y="104" font-size="14" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#f85149"> conflict</tspan><tspan fill="#8b949e"> ·   </tspan><tspan fill="#e6edf3">1d  extract idle watchdog</tspan></text>
+  <text x="410" y="104" font-size="14" fill="#8b949e">github.com/me/api/pull/1008</text>
+  <text x="40" y="126" font-size="14" xml:space="preserve"><tspan fill="#f85149">✗</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#d29922">review </tspan><tspan fill="#e6edf3">2d  map user_id to goaml</tspan></text>
+  <text x="410" y="126" font-size="14" fill="#8b949e">github.com/me/api/pull/12442</text>
 
   <text x="28" y="158" font-size="15">
     <tspan fill="#e6edf3" font-weight="bold">Ready to merge</tspan>
   </text>
-  <text x="40" y="184" font-size="14.5" xml:space="preserve"><tspan fill="#3fb950">✓</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#3fb950"> approved</tspan><tspan fill="#d29922"> 2d</tspan><tspan fill="#58a6ff">  api#12385 </tspan><tspan fill="#e6edf3">validate config on save</tspan></text>
+  <text x="40" y="184" font-size="14" xml:space="preserve"><tspan fill="#3fb950">✓</tspan><tspan fill="#8b949e"> clean   </tspan><tspan fill="#3fb950">approved </tspan><tspan fill="#e6edf3">2d  validate config</tspan></text>
+  <text x="410" y="184" font-size="14" fill="#8b949e">github.com/me/api/pull/12385</text>
 
   <text x="28" y="220" font-size="13" fill="#8b949e">all your open PRs, ranked by what needs your action</text>
 </svg>
