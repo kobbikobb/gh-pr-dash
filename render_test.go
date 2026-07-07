@@ -40,8 +40,8 @@ func TestPad(t *testing.T) {
 
 func TestRenderTerminal(t *testing.T) {
 	rows := []Row{
-		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "https://github.com/me/glint/pull/20"},
-		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "https://github.com/me/api/pull/5", Comments: 3},
+		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", Repo: "glint", URL: "https://github.com/me/glint/pull/20"},
+		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", Repo: "api", URL: "https://github.com/me/api/pull/5", Comments: 3},
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
