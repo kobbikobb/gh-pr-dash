@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
-	"golang.org/x/term"
 )
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
@@ -102,11 +101,5 @@ func main() {
 		return
 	}
 
-	fd := int(os.Stdout.Fd())
-	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
-	width := 120
-	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
-		width = w
-	}
-	fmt.Print(renderTerminal(rows, width, useColor))
+	fmt.Print(renderTerminal(rows, 120))
 }

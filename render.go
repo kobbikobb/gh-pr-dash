@@ -15,10 +15,7 @@ var tierNames = []string{
 
 type palette struct{ b, d, r, g, y, c, z string }
 
-func colors(on bool) palette {
-	if !on {
-		return palette{}
-	}
+func colors() palette {
 	return palette{
 		b: "\033[1m", d: "\033[2m", r: "\033[31m",
 		g: "\033[32m", y: "\033[33m", c: "\033[36m", z: "\033[0m",
@@ -98,11 +95,11 @@ func reviewText(code string) string {
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int, color bool) string {
+func renderTerminal(rows []Row, width int) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
-	p := colors(color)
+	p := colors()
 
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
