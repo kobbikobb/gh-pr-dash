@@ -13,12 +13,13 @@ var tierNames = []string{
 	"Drafts",
 }
 
-type palette struct{ b, d, r, g, y, c, z string }
+type palette struct{ b, d, r, g, y, c, u, m, z string }
 
 func colors() palette {
 	return palette{
 		b: "\033[1m", d: "\033[2m", r: "\033[31m",
-		g: "\033[32m", y: "\033[33m", c: "\033[36m", z: "\033[0m",
+		g: "\033[32m", y: "\033[33m", c: "\033[36m",
+		u: "\033[34m", m: "\033[35m", z: "\033[0m",
 	}
 }
 
@@ -124,7 +125,7 @@ func renderTerminal(rows []Row, width int) string {
 			repoW = n
 		}
 	}
-	prefixW := fixedW + 1 + repoW + 1 // repo column + spaces
+	prefixW := fixedW + repoW + 1 // repo column + spaces
 	titleW := width - prefixW - 2 - urlW
 	if titleW > longest {
 		titleW = longest
@@ -149,8 +150,8 @@ func renderTerminal(rows []Row, width int) string {
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
-		repo := p.d + padRight(truncate(r.Repo, repoW), repoW) + p.z
-		url := p.d + r.URL + p.z
+		repo := p.u + padRight(truncate(r.Repo, repoW), repoW) + p.z
+		url := p.m + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
