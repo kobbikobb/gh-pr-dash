@@ -24,14 +24,19 @@ func watchLoop(opts options) {
 	tick := 0
 	lastWidth := 0
 	var cachedRows []Row
+	var errMsg string
 
-	// Initial fetch
-	prs, err := fetchPRs(opts.limit)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-	} else {
+	fetch := func() {
+		prs, err := fetchPRs(opts.limit)
+		if err != nil {
+			errMsg = err.Error()
+			return
+		}
 		cachedRows = buildRows(prs, opts.org, time.Now())
+		errMsg = ""
 	}
+
+	fetch()
 
 	for {
 		// Detect the size every frame so a resize reflows immediately; a full
@@ -41,19 +46,13 @@ func watchLoop(opts options) {
 			fmt.Print("\033[2J")
 			lastWidth = t.width
 		}
-		renderWatch(opts, tick, cachedRows, t)
+		renderWatch(opts, tick, cachedRows, errMsg, t)
 
 		select {
 		case <-sig:
 			return
 		case <-dataTicker.C:
-			// Refetch data
-			prs, err := fetchPRs(opts.limit)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-			} else {
-				cachedRows = buildRows(prs, opts.org, time.Now())
-			}
+			fetch()
 			tick++
 		case <-animTicker.C:
 			// Just animate (tick increments, no data fetch)
@@ -62,13 +61,16 @@ func watchLoop(opts options) {
 	}
 }
 
-func renderWatch(opts options, tick int, rows []Row, t terminal) {
+func renderWatch(opts options, tick int, rows []Row, errMsg string, t terminal) {
 	fmt.Print("\033[H")
-	header := renderHeader(tick, true, t.useColor, t.width)
-	var table string
-	if !opts.asJSON {
-		table = renderTerminal(rows, t.width, t.useColor)
+	p := colors(t.useColor)
+	out := renderHeader(tick, true, t.useColor, t.width)
+	if errMsg != "" {
+		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}
-	_, _ = fmt.Fprint(os.Stdout, header+table)
+	if !opts.asJSON {
+		out += renderTerminal(rows, t.width, t.useColor)
+	}
+	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
 }
