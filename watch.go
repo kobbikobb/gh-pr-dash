@@ -16,9 +16,10 @@ func watchLoop(opts options) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
+	tick := 0
 	for {
 		fmt.Print("\033[H")
-		if err := fetchAndRender(os.Stdout, opts); err != nil {
+		if err := fetchAndRender(os.Stdout, opts, tick); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 		}
 		fmt.Print("\033[J")
@@ -28,6 +29,7 @@ func watchLoop(opts options) {
 			fmt.Println()
 			return
 		case <-ticker.C:
+			tick++
 		}
 	}
 }
