@@ -90,3 +90,54 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 }
+
+func TestRenderHeader(t *testing.T) {
+	t.Run("should render static header box with wordmark", func(t *testing.T) {
+		out := renderHeader(0, false, false, 60, 40, "")
+
+		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
+			t.Errorf("missing box:\n%s", out)
+		}
+		if !strings.Contains(out, "███") || !strings.Contains(out, appName) {
+			t.Errorf("missing wordmark:\n%s", out)
+		}
+	})
+
+	t.Run("should render the refresh status under watch", func(t *testing.T) {
+		out := renderHeader(0, true, false, 60, 40, "refreshed 15:04 · next 42s")
+
+		if !strings.Contains(out, "next 42s") {
+			t.Errorf("missing refresh status:\n%s", out)
+		}
+	})
+
+	t.Run("should fill the top border to the exact terminal width", func(t *testing.T) {
+		out := renderHeader(0, true, false, 72, 40, "")
+
+		bar := strings.SplitN(out, "\n", 2)[0]
+
+		if got := len([]rune(bar)); got != 72 {
+			t.Errorf("border width = %d, want 72:\n%q", got, bar)
+		}
+	})
+
+	t.Run("should collapse to a one-line bar on short terminals", func(t *testing.T) {
+		out := renderHeader(0, false, false, 80, 10, "")
+
+		if strings.Contains(out, "╔") || strings.Contains(out, "███") {
+			t.Errorf("box should collapse on short height:\n%s", out)
+		}
+		if !strings.Contains(out, appName) {
+			t.Errorf("missing app name:\n%s", out)
+		}
+	})
+
+	t.Run("should animate the wordmark colors on each tick", func(t *testing.T) {
+		out0 := renderHeader(0, true, true, 60, 40, "")
+		out1 := renderHeader(1, true, true, 60, 40, "")
+
+		if out0 == out1 {
+			t.Error("header should change between ticks")
+		}
+	})
+}

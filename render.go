@@ -7,7 +7,7 @@ import (
 )
 
 var tierNames = []string{
-	"Needs action (CI fail / conflict)",
+	"Needs action — CI fail / conflict",
 	"Ready to merge",
 	"Waiting on review",
 	"Drafts",
@@ -89,6 +89,17 @@ func reviewColor(code string, p palette) string {
 	}
 }
 
+func idleColor(days int, p palette) string {
+	switch {
+	case days >= 14:
+		return p.r
+	case days >= 7:
+		return p.y
+	default:
+		return p.d
+	}
+}
+
 func reviewText(code string) string {
 	if code == "none" {
 		return "·"
@@ -103,6 +114,13 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		return "No open PRs.\n"
 	}
 	p := colors(color)
+
+	counts := make([]int, len(tierNames))
+	for _, r := range rows {
+		if r.Tier >= 0 && r.Tier < len(counts) {
+			counts[r.Tier]++
+		}
+	}
 
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
@@ -143,7 +161,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			tier = r.Tier
 			name := "?"
 			if tier >= 0 && tier < len(tierNames) {
-				name = tierNames[tier]
+				name = fmt.Sprintf("%s (%d)", tierNames[tier], counts[tier])
 			}
 			color := p.d
 			if tier >= 0 && tier < len(headColor) {
@@ -155,11 +173,13 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
-		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
+		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		url := p.d + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, title, url)
 	}
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready%s\n",
+		p.d, len(rows), counts[tierNeedsAction], counts[tierReady], p.z)
 	return b.String()
 }

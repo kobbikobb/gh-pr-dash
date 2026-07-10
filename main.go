@@ -6,32 +6,44 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--json] [--watch] [max]
+Usage: gh pr-dash [--org <name>] [--json] [--watch] [--interval <dur>] [max]
 
-  --org <name>   Scope to a single org/owner
-  --json         Emit raw JSON rows (for scripts)
-  --watch        Refresh every minute
-  max            Max PRs to fetch (default 100)
+  --org <name>       Scope to a single org/owner
+  --json             Emit raw JSON rows (for scripts)
+  --watch            Refresh on an interval
+  --interval <dur>   Watch refresh interval, e.g. 30s, 2m (default 1m)
+  max                Max PRs to fetch (default 100)
 `
 
 type options struct {
-	org    string
-	limit  int
-	asJSON bool
-	watch  bool
+	org      string
+	limit    int
+	asJSON   bool
+	watch    bool
+	interval time.Duration
 }
 
 func parseArgs(args []string) (options, bool) {
-	o := options{limit: 100}
+	o := options{limit: 100, interval: time.Minute}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--org":
 			if i++; i < len(args) {
 				o.org = args[i]
+			}
+		case "--interval":
+			if i++; i < len(args) {
+				d, err := time.ParseDuration(args[i])
+				if err != nil || d < time.Second {
+					fmt.Fprintf(os.Stderr, "invalid interval: %s\n", args[i])
+					return o, false
+				}
+				o.interval = d
 			}
 		case "--json":
 			o.asJSON = true
@@ -40,13 +52,21 @@ func parseArgs(args []string) (options, bool) {
 		case "-h", "--help":
 			return o, false
 		default:
-			if n, err := strconv.Atoi(args[i]); err == nil {
-				o.limit = n
-			} else {
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 				return o, false
 			}
+			if n <= 0 {
+				fmt.Fprintf(os.Stderr, "max must be positive: %s\n", args[i])
+				return o, false
+			}
+			o.limit = n
 		}
+	}
+	if o.watch && o.asJSON {
+		fmt.Fprintln(os.Stderr, "--watch and --json cannot be combined")
+		return o, false
 	}
 	return o, true
 }
