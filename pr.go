@@ -176,8 +176,7 @@ func classifyMerged(pr ghPR, now time.Time) Row {
 	}
 }
 
-// buildMergedRows keeps the search order (newest first) so the freshest merge
-// sits at the top of the section.
+// buildMergedRows preserves the search order (most recently updated first).
 func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
 	rows := make([]Row, 0, len(prs))
 	for _, pr := range prs {

@@ -70,13 +70,14 @@ func fetchRows(opts options, now time.Time) ([]Row, error) {
 	}
 	rows := buildRows(open, opts.org, now)
 
+	// The open list is the primary job; a failure on the secondary merged
+	// search just drops that section rather than blanking everything.
 	since := now.Add(-mergedWindow).UTC().Format("2006-01-02T15:04:05Z")
 	mergedQ := fmt.Sprintf("author:@me is:pr is:merged merged:>=%s sort:updated-desc", since)
-	merged, err := fetchPRs(mergedQ, opts.limit)
-	if err != nil {
-		return nil, err
+	if merged, err := fetchPRs(mergedQ, opts.limit); err == nil {
+		rows = append(rows, buildMergedRows(merged, opts.org, now)...)
 	}
-	return append(rows, buildMergedRows(merged, opts.org, now)...), nil
+	return rows, nil
 }
 
 func fetchAndRender(w io.Writer, opts options) error {
