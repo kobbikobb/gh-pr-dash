@@ -89,6 +89,17 @@ func reviewColor(code string, p palette) string {
 	}
 }
 
+func idleColor(days int, p palette) string {
+	switch {
+	case days >= 14:
+		return p.r
+	case days >= 7:
+		return p.y
+	default:
+		return p.d
+	}
+}
+
 func reviewText(code string) string {
 	if code == "none" {
 		return "·"
@@ -162,7 +173,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
-		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
+		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		url := p.d + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
