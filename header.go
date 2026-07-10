@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -9,71 +8,85 @@ import (
 var spinner = [9]rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇'}
 
 var dashArt = []string{
-	`  ▄▄▄  ▄  ▄ ▄▄▄ ▄  ▄ ▄▄▄ ▄  ▄ ▄  ▄`,
-	`  █▄▄  █▄█   █   █▄█   █ █▄▄█ █▄▄█`,
-	`  ▀▀▀  ▀ ▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀ ▀  ▀`,
+	` ▄▄▄  ▄  ▄ ▄▄▄ ▄  ▄ ▄▄▄ ▄  ▄ ▄  ▄`,
+	` █▄▄  █▄█   █   █▄█   █ █▄▄█ █▄▄█`,
+	` ▀▀▀  ▀ ▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀ ▀  ▀`,
 }
 
-const (
-	boxH  = "━"
-	boxV  = "┃"
-	boxTL = "┏"
-	boxTR = "┓"
-	boxBL = "┗"
-	boxBR = "┛"
-)
+const borderChars = "═══════════════════════════════════════════════════════════════"
 
-func boxLine(content string, width int) string {
-	padding := width - 2 - len([]rune(content))
-	if padding < 0 {
-		padding = 0
+func centerPad(s string, width int) string {
+	runeCount := len([]rune(s))
+	if runeCount >= width {
+		return s
 	}
-	return boxV + content + strings.Repeat(" ", padding) + boxV
+	pad := (width - runeCount) / 2
+	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-runeCount-pad)
 }
 
-func renderHeader(tick int, watch bool, color bool) string {
+func renderHeader(tick int, watch bool, color bool, width int) string {
 	p := colors(color)
 
 	if !watch {
-		return renderStaticHeader(p)
+		return renderStaticHeader(p, width)
 	}
-	return renderWatchHeader(tick, p)
+	return renderWatchHeader(tick, p, width)
 }
 
-func renderStaticHeader(p palette) string {
-	width := 44
+func renderStaticHeader(p palette, width int) string {
 	var b strings.Builder
 
-	b.WriteString(p.c + boxTL + strings.Repeat(boxH, width-2) + boxTR + p.z + "\n")
+	border := truncate(borderChars, width-2)
+	b.WriteString(p.c + "╔" + border + "╗" + p.z + "\n")
+	b.WriteString(p.c + "║" + centerPad("", width-2) + "║" + p.z + "\n")
 	for _, line := range dashArt {
-		b.WriteString(boxLine(p.b+line+p.z, width) + "\n")
+		b.WriteString(p.c + "║" + p.z + p.b + centerPad(line, width-2) + p.z + p.c + "║" + p.z + "\n")
 	}
-	b.WriteString(boxLine("", width) + "\n")
-	b.WriteString(boxLine(p.d+"by kobbikobb"+p.z, width) + "\n")
-	b.WriteString(p.c + boxBL + strings.Repeat(boxH, width-2) + boxBR + p.z + "\n")
+	b.WriteString(p.c + "║" + centerPad("", width-2) + "║" + p.z + "\n")
+	b.WriteString(p.c + "║" + p.z + p.d + centerPad("by kobbikobb", width-2) + p.z + p.c + "║" + p.z + "\n")
+	b.WriteString(p.c + "╚" + border + "╝" + p.z + "\n")
 
 	return b.String() + "\n"
 }
 
-func renderWatchHeader(tick int, p palette) string {
-	width := 44
+func renderWatchHeader(tick int, p palette, width int) string {
 	spin := spinner[tick%len(spinner)]
 	now := time.Now().Format("15:04:05")
+
+	border := truncate(borderChars, width-2)
+
+	// Animate border color: cycle through cyan, yellow, green
+	borderColors := []string{p.c, p.y, p.g}
+	bc := borderColors[(tick/2)%len(borderColors)]
+
 	var b strings.Builder
 
-	b.WriteString(p.y + boxTL + strings.Repeat(boxH, width-2) + boxTR + p.z + "\n")
-	for _, line := range dashArt {
-		b.WriteString(boxLine(p.b+line+p.z, width) + "\n")
+	b.WriteString(bc + "╔" + border + "╗" + p.z + "\n")
+	b.WriteString(bc + "║" + centerPad("", width-2) + "║" + p.z + "\n")
+	for i, line := range dashArt {
+		// Animate each line of the art with a color shift
+		lineColors := []string{p.r, p.y, p.g, p.c}
+		lc := lineColors[(tick+i)%len(lineColors)]
+		b.WriteString(bc + "║" + p.z + lc + p.b + centerPad(line, width-2) + p.z + bc + "║" + p.z + "\n")
 	}
-	b.WriteString(boxLine("", width) + "\n")
+	b.WriteString(bc + "║" + centerPad("", width-2) + "║" + p.z + "\n")
 
-	status := fmt.Sprintf("%s%c%s %srefreshing%s  %s%s%s",
-		p.g, spin, p.z,
-		p.d, p.z,
-		p.d, now, p.z,
-	)
-	b.WriteString(boxLine(status, width) + "\n")
-	b.WriteString(p.y + boxBL + strings.Repeat(boxH, width-2) + boxBR + p.z + "\n")
+	// Animated status line
+	statusBar := renderStatusBar(spin, now, width-4)
+	b.WriteString(bc + "║" + p.z + statusBar + bc + "║" + p.z + "\n")
+
+	b.WriteString(bc + "╚" + border + "╝" + p.z + "\n")
 
 	return b.String() + "\n"
+}
+
+func renderStatusBar(spin rune, timestamp string, width int) string {
+	spinStr := string(spin)
+	left := spinStr + " "
+	right := timestamp
+	middle := width - len([]rune(left)) - len([]rune(right))
+	if middle < 1 {
+		middle = 1
+	}
+	return left + strings.Repeat(" ", middle) + right
 }

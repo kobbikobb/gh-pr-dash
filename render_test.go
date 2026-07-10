@@ -93,9 +93,9 @@ func TestRenderTerminal(t *testing.T) {
 
 func TestRenderHeader(t *testing.T) {
 	t.Run("should render static header with box", func(t *testing.T) {
-		out := renderHeader(0, false, false)
+		out := renderHeader(0, false, false, 60)
 
-		if !strings.Contains(out, "┏") || !strings.Contains(out, "┛") {
+		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
 			t.Errorf("missing box drawing:\n%s", out)
 		}
 		if !strings.Contains(out, "▄▄▄") {
@@ -104,19 +104,19 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should render watch header with spinner", func(t *testing.T) {
-		out := renderHeader(0, true, false)
+		out := renderHeader(0, true, false, 60)
 
 		if !strings.Contains(out, "⠋") {
 			t.Errorf("missing spinner:\n%s", out)
 		}
-		if !strings.Contains(out, "refreshing") {
-			t.Errorf("missing refreshing text:\n%s", out)
+		if !strings.Contains(out, "15:") {
+			t.Errorf("missing timestamp:\n%s", out)
 		}
 	})
 
 	t.Run("should cycle spinner on each tick", func(t *testing.T) {
-		out0 := renderHeader(0, true, false)
-		out1 := renderHeader(1, true, false)
+		out0 := renderHeader(0, true, false, 60)
+		out1 := renderHeader(1, true, false, 60)
 
 		if out0 == out1 {
 			t.Error("header should change between ticks")
