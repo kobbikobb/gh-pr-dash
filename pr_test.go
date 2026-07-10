@@ -280,3 +280,47 @@ func TestBuildRows(t *testing.T) {
 		}
 	})
 }
+
+func TestRepoFromRef(t *testing.T) {
+	cases := map[string]string{
+		"api#42":    "api",
+		"my-repo#1": "my-repo",
+		"no-number": "no-number",
+		"#3":        "",
+	}
+	for in, want := range cases {
+		t.Run("should extract repo from "+in, func(t *testing.T) {
+			if got := repoFromRef(in); got != want {
+				t.Errorf("repoFromRef(%q) = %q, want %q", in, got, want)
+			}
+		})
+	}
+}
+
+func TestFilterRows(t *testing.T) {
+	rows := []Row{
+		{Repository: "api", Ref: "api#1"},
+		{Repository: "web", Ref: "web#2"},
+		{Repository: "api", Ref: "api#3"},
+	}
+
+	t.Run("should return all rows when repo is empty", func(t *testing.T) {
+		if got := filterRows(rows, ""); len(got) != 3 {
+			t.Errorf("got %d rows, want 3", len(got))
+		}
+	})
+
+	t.Run("should filter to matching repo", func(t *testing.T) {
+		got := filterRows(rows, "api")
+
+		if len(got) != 2 || got[0].Ref != "api#1" || got[1].Ref != "api#3" {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	t.Run("should return nil when no matches", func(t *testing.T) {
+		if got := filterRows(rows, "nope"); got != nil {
+			t.Errorf("got %+v, want nil", got)
+		}
+	})
+}

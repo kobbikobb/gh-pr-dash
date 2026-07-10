@@ -11,9 +11,10 @@ import (
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--json] [--watch] [--interval <dur>] [max]
+Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [--watch] [--interval <dur>] [max]
 
   --org <name>       Scope to a single org/owner
+  --repo <name>      Scope to a single repo
   --json             Emit raw JSON rows (for scripts)
   --watch            Refresh on an interval
   --interval <dur>   Watch refresh interval, e.g. 30s, 2m (default 1m)
@@ -22,6 +23,7 @@ Usage: gh pr-dash [--org <name>] [--json] [--watch] [--interval <dur>] [max]
 
 type options struct {
 	org      string
+	repo     string
 	limit    int
 	asJSON   bool
 	watch    bool
@@ -35,6 +37,10 @@ func parseArgs(args []string) (options, bool) {
 		case "--org":
 			if i++; i < len(args) {
 				o.org = args[i]
+			}
+		case "--repo":
+			if i++; i < len(args) {
+				o.repo = args[i]
 			}
 		case "--interval":
 			if i++; i < len(args) {

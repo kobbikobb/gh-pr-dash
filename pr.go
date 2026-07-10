@@ -40,15 +40,16 @@ type ghPR struct {
 //	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
 type Row struct {
-	Tier     int    `json:"tier"`
-	IdleDays int    `json:"idle_days"`
-	CI       string `json:"ci"`
-	Merge    string `json:"merge"`
-	Review   string `json:"review"`
-	Ref      string `json:"pr"`
-	URL      string `json:"url"`
-	Comments int    `json:"comments"`
-	Title    string `json:"title"`
+	Tier       int    `json:"tier"`
+	IdleDays   int    `json:"idle_days"`
+	CI         string `json:"ci"`
+	Merge      string `json:"merge"`
+	Review     string `json:"review"`
+	Ref        string `json:"pr"`
+	Repository string `json:"repo"`
+	URL        string `json:"url"`
+	Comments   int    `json:"comments"`
+	Title      string `json:"title"`
 }
 
 // Tier values, lowest sorts first.
@@ -154,15 +155,16 @@ func classify(pr ghPR, now time.Time) Row {
 	review := reviewCode(pr)
 
 	return Row{
-		Tier:     tierFor(pr, ci, merge, review),
-		IdleDays: int(now.Sub(pr.UpdatedAt).Hours() / 24),
-		CI:       ci,
-		Merge:    merge,
-		Review:   review,
-		Ref:      shortRef(pr),
-		URL:      pr.URL,
-		Comments: pr.Comments.TotalCount,
-		Title:    pr.Title,
+		Tier:       tierFor(pr, ci, merge, review),
+		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),
+		CI:         ci,
+		Merge:      merge,
+		Review:     review,
+		Ref:        shortRef(pr),
+		Repository: repoFromRef(shortRef(pr)),
+		URL:        pr.URL,
+		Comments:   pr.Comments.TotalCount,
+		Title:      pr.Title,
 	}
 }
 
@@ -174,19 +176,41 @@ func shortRef(pr ghPR) string {
 	return short + "#" + strconv.Itoa(pr.Number)
 }
 
+// repoFromRef extracts the repo name from a short ref like "repo#42".
+func repoFromRef(ref string) string {
+	if i := strings.Index(ref, "#"); i >= 0 {
+		return ref[:i]
+	}
+	return ref
+}
+
+func filterRows(rows []Row, repo string) []Row {
+	if repo == "" {
+		return rows
+	}
+	var filtered []Row
+	for _, r := range rows {
+		if r.Repository == repo {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
 // classifyMerged builds a row for an already-merged PR; CI/review status is
 // no longer actionable, so only the merge marker and merge age are shown.
 func classifyMerged(pr ghPR, now time.Time) Row {
 	return Row{
-		Tier:     tierMerged,
-		IdleDays: int(now.Sub(pr.MergedAt).Hours() / 24),
-		CI:       "none",
-		Merge:    "merged",
-		Review:   "none",
-		Ref:      shortRef(pr),
-		URL:      pr.URL,
-		Comments: pr.Comments.TotalCount,
-		Title:    pr.Title,
+		Tier:       tierMerged,
+		IdleDays:   int(now.Sub(pr.MergedAt).Hours() / 24),
+		CI:         "none",
+		Merge:      "merged",
+		Review:     "none",
+		Ref:        shortRef(pr),
+		Repository: repoFromRef(shortRef(pr)),
+		URL:        pr.URL,
+		Comments:   pr.Comments.TotalCount,
+		Title:      pr.Title,
 	}
 }
 

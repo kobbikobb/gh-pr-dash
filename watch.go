@@ -41,8 +41,6 @@ func watchLoop(opts options) {
 	startFetch()
 
 	for {
-		// Detect the size every frame so a resize reflows immediately; a full
-		// clear on width change wipes the wrapped residue \033[J can't reach.
 		t := detectTerminal()
 		if t.width != lastWidth {
 			fmt.Print("\033[2J")
@@ -65,7 +63,6 @@ func watchLoop(opts options) {
 			startFetch()
 			tick++
 		case <-animTicker.C:
-			// Just animate (tick increments, no data fetch)
 			tick++
 		}
 	}
@@ -99,7 +96,11 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 	case len(rows) == 0 && errMsg == "" && status == "":
 		out += p.d + "  loading…" + p.z + "\n"
 	default:
-		out += renderTerminal(rows, t.width, t.useColor)
+		filtered := filterRows(rows, opts.repo)
+		if opts.repo != "" && len(filtered) == 0 {
+			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
+		}
+		out += renderTerminal(filtered, t.width, t.useColor)
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
