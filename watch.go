@@ -13,6 +13,9 @@ func watchLoop(opts options) {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
 
+	fmt.Print("\033[?1049h\033[?25l")
+	defer fmt.Print("\033[?25h\033[?1049l")
+
 	dataTicker := time.NewTicker(opts.interval)
 	animTicker := time.NewTicker(200 * time.Millisecond)
 	defer dataTicker.Stop()
@@ -42,7 +45,6 @@ func watchLoop(opts options) {
 
 		select {
 		case <-sig:
-			fmt.Println()
 			return
 		case <-dataTicker.C:
 			// Refetch data
