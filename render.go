@@ -179,5 +179,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, title, url)
 	}
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready%s\n",
+		p.d, len(rows), counts[tierNeedsAction], counts[tierReady], p.z)
 	return b.String()
 }
