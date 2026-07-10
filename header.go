@@ -83,7 +83,11 @@ func renderHeader(tick int, watch bool, color bool, width, height int, status st
 	}
 
 	if watch {
-		center(len([]rune(status)), p.d+status+p.z)
+		pad := w - 2 - 2 - len([]rune(status))
+		if pad < 0 {
+			pad = 0
+		}
+		b.WriteString(edge + "  " + p.d + status + p.z + strings.Repeat(" ", pad) + edge + "\n")
 	} else {
 		center(len(appName), p.d+appName+p.z)
 	}
