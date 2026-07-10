@@ -15,7 +15,7 @@ const searchQuery = `query($q:String!,$n:Int!){
   search(query:$q,type:ISSUE,first:$n){
     nodes{
       ... on PullRequest{
-        number title url isDraft reviewDecision updatedAt mergedAt mergeable
+        number title url isDraft reviewDecision updatedAt mergedAt mergeable mergeStateStatus
         repository{ nameWithOwner }
         comments{ totalCount }
         latestOpinionatedReviews(first:20){ nodes{ state } }
@@ -25,6 +25,7 @@ const searchQuery = `query($q:String!,$n:Int!){
   }
 }`
 
+// Keep the "last 24h" heading in render.go in sync with this window.
 const mergedWindow = 24 * time.Hour
 
 type terminal struct {

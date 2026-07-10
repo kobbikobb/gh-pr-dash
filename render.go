@@ -154,7 +154,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.c}
+	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {

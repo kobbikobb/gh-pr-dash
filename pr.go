@@ -9,16 +9,17 @@ import (
 
 // ghPR is the shape returned by the GitHub GraphQL search query.
 type ghPR struct {
-	Number         int
-	Title          string
-	URL            string
-	IsDraft        bool
-	ReviewDecision string
-	UpdatedAt      time.Time
-	MergedAt       time.Time
-	Mergeable      string
-	Repository     struct{ NameWithOwner string }
-	Comments       struct{ TotalCount int }
+	Number           int
+	Title            string
+	URL              string
+	IsDraft          bool
+	ReviewDecision   string
+	UpdatedAt        time.Time
+	MergedAt         time.Time
+	Mergeable        string
+	MergeStateStatus string
+	Repository       struct{ NameWithOwner string }
+	Comments         struct{ TotalCount int }
 
 	LatestOpinionatedReviews struct {
 		Nodes []struct{ State string }
@@ -36,7 +37,7 @@ type ghPR struct {
 // not display strings, so each renderer can style them independently.
 //
 //	ci:     ok | fail | pending | none
-//	merge:  clean | conflict | unknown
+//	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
 type Row struct {
 	Tier     int    `json:"tier"`
@@ -129,10 +130,19 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 	case ci == "fail" || merge == "conflict":
 		return tierNeedsAction
 	case review == "approved" && merge == "clean":
-		if ci == "pending" {
+		switch ci {
+		case "pending":
+			return tierBuilding
+		case "ok":
+			return tierReady
+		default:
+			// No rollup: ready only when GitHub says nothing blocks the merge;
+			// a non-CLEAN state means required checks just haven't reported yet.
+			if pr.MergeStateStatus == "CLEAN" {
+				return tierReady
+			}
 			return tierBuilding
 		}
-		return tierReady
 	default:
 		return tierWaiting
 	}

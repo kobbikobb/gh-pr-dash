@@ -84,6 +84,22 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should render merged rows and exclude them from the open count", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierNeedsAction, CI: "fail", Merge: "clean", Review: "none", URL: "https://x/1"},
+			{Tier: tierMerged, CI: "none", Merge: "merged", Review: "none", URL: "https://x/2"},
+		}
+
+		out := renderTerminal(mixed, 120, false)
+
+		if !strings.Contains(out, "Recently merged") || !strings.Contains(out, "merged") {
+			t.Errorf("missing merged section:\n%s", out)
+		}
+		if !strings.Contains(out, "1 open") || !strings.Contains(out, "1 merged") {
+			t.Errorf("summary should count 1 open, 1 merged:\n%s", out)
+		}
+	})
+
 	t.Run("should report empty state", func(t *testing.T) {
 		if got := renderTerminal(nil, 100, false); !strings.Contains(got, "No open PRs") {
 			t.Errorf("got %q", got)

@@ -141,11 +141,19 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
-	t.Run("should rank approved+clean with no checks as ready", func(t *testing.T) {
-		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED" })
+	t.Run("should rank approved+clean with no checks and a clean merge state as ready", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; p.MergeStateStatus = "CLEAN" })
 
 		if classify(pr, time.Now()).Tier != tierReady {
 			t.Error("want ready when there are no checks to wait on")
+		}
+	})
+
+	t.Run("should rank approved+clean blocked by unreported checks as waiting-on-CI", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; p.MergeStateStatus = "BLOCKED" })
+
+		if classify(pr, time.Now()).Tier != tierBuilding {
+			t.Error("want waiting-on-CI when required checks have not reported")
 		}
 	})
 
