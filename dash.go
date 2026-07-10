@@ -27,17 +27,21 @@ const searchQuery = `query($q:String!,$n:Int!){
 
 type terminal struct {
 	width    int
+	height   int
 	useColor bool
 }
 
 func detectTerminal() terminal {
 	fd := int(os.Stdout.Fd())
 	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
-	width := 120
-	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+	width, height := 120, 40
+	if w, h, err := term.GetSize(fd); err == nil && w > 0 {
 		width = w
+		if h > 0 {
+			height = h
+		}
 	}
-	return terminal{width: width, useColor: useColor}
+	return terminal{width: width, height: height, useColor: useColor}
 }
 
 func fetchPRs(limit int) ([]ghPR, error) {
@@ -72,7 +76,7 @@ func fetchAndRender(w io.Writer, opts options, tick int) error {
 	}
 
 	t := detectTerminal()
-	header := renderHeader(tick, opts.watch, t.useColor, t.width)
+	header := renderHeader(tick, opts.watch, t.useColor, t.width, t.height)
 	_, err = fmt.Fprint(w, header+renderTerminal(rows, t.width, t.useColor))
 	return err
 }

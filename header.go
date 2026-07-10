@@ -37,7 +37,12 @@ func banner(s string) []string {
 // renderHeader draws the wordmark inside a box. Under --watch the border and
 // each art row cycle colors for a wave; otherwise it renders in one steady color.
 // Padding is applied to plain runes so ANSI codes never skew the frame width.
-func renderHeader(tick int, watch bool, color bool, width int) string {
+// On short terminals the box would eat the view, so it collapses to one line.
+func renderHeader(tick int, watch bool, color bool, width, height int) string {
+	if height < 16 {
+		return renderCompactHeader(tick, watch, color, width)
+	}
+
 	p := colors(color)
 	if width < 40 {
 		width = 40
@@ -89,4 +94,29 @@ func renderHeader(tick int, watch bool, color bool, width int) string {
 
 	b.WriteString(border + "╚" + strings.Repeat("═", w-2) + "╝" + p.z + "\n")
 	return b.String() + "\n"
+}
+
+func renderCompactHeader(tick int, watch bool, color bool, width int) string {
+	p := colors(color)
+	if width < 20 {
+		width = 20
+	}
+
+	border := p.c
+	right, rightVis := "", 0
+	if watch {
+		border = []string{p.c, p.y, p.g}[(tick/3)%3]
+		spin := string(spinner[tick%len(spinner)])
+		clock := time.Now().Format("15:04:05")
+		right = "  " + p.g + spin + p.z + " " + p.d + clock + p.z
+		rightVis = 2 + 1 + 1 + len(clock)
+	}
+
+	name := " " + appName + " "
+	fill := width - len([]rune(name)) - rightVis
+	if fill < 0 {
+		fill = 0
+	}
+
+	return border + p.b + name + p.z + border + strings.Repeat("─", fill) + p.z + right + "\n\n"
 }

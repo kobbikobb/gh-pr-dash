@@ -93,7 +93,7 @@ func TestRenderTerminal(t *testing.T) {
 
 func TestRenderHeader(t *testing.T) {
 	t.Run("should render static header box with wordmark", func(t *testing.T) {
-		out := renderHeader(0, false, false, 60)
+		out := renderHeader(0, false, false, 60, 40)
 
 		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
 			t.Errorf("missing box:\n%s", out)
@@ -104,7 +104,7 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should render watch header with spinner and clock", func(t *testing.T) {
-		out := renderHeader(0, true, false, 60)
+		out := renderHeader(0, true, false, 60, 40)
 
 		if !strings.Contains(out, "⠋") {
 			t.Errorf("missing spinner:\n%s", out)
@@ -114,19 +114,30 @@ func TestRenderHeader(t *testing.T) {
 		}
 	})
 
-	t.Run("should fill the bar to the exact terminal width", func(t *testing.T) {
-		out := renderHeader(0, true, false, 72)
+	t.Run("should fill the top border to the exact terminal width", func(t *testing.T) {
+		out := renderHeader(0, true, false, 72, 40)
 
 		bar := strings.SplitN(out, "\n", 2)[0]
 
 		if got := len([]rune(bar)); got != 72 {
-			t.Errorf("bar width = %d, want 72:\n%q", got, bar)
+			t.Errorf("border width = %d, want 72:\n%q", got, bar)
+		}
+	})
+
+	t.Run("should collapse to a one-line bar on short terminals", func(t *testing.T) {
+		out := renderHeader(0, false, false, 80, 10)
+
+		if strings.Contains(out, "╔") || strings.Contains(out, "███") {
+			t.Errorf("box should collapse on short height:\n%s", out)
+		}
+		if !strings.Contains(out, appName) {
+			t.Errorf("missing app name:\n%s", out)
 		}
 	})
 
 	t.Run("should cycle spinner on each tick", func(t *testing.T) {
-		out0 := renderHeader(0, true, false, 60)
-		out1 := renderHeader(1, true, false, 60)
+		out0 := renderHeader(0, true, false, 60, 40)
+		out1 := renderHeader(1, true, false, 60, 40)
 
 		if out0 == out1 {
 			t.Error("header should change between ticks")

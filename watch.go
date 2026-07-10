@@ -64,7 +64,7 @@ func watchLoop(opts options) {
 func renderWatch(opts options, tick int, rows []Row, errMsg string, t terminal) {
 	fmt.Print("\033[H")
 	p := colors(t.useColor)
-	out := renderHeader(tick, true, t.useColor, t.width)
+	out := renderHeader(tick, true, t.useColor, t.width, t.height)
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}
