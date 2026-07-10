@@ -35,6 +35,54 @@ func TestCiCode(t *testing.T) {
 	}
 }
 
+func TestMergeCode(t *testing.T) {
+	cases := map[string]string{
+		"CONFLICTING": "conflict",
+		"MERGEABLE":   "clean",
+		"UNKNOWN":     "unknown",
+		"":            "unknown",
+	}
+	for in, want := range cases {
+		t.Run("should map "+in+" to "+want, func(t *testing.T) {
+			if got := mergeCode(in); got != want {
+				t.Errorf("mergeCode(%q) = %q, want %q", in, got, want)
+			}
+		})
+	}
+}
+
+func TestRollupState(t *testing.T) {
+	t.Run("should return state from rollup", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { setRollup(p, "SUCCESS") })
+
+		if got := rollupState(pr); got != "SUCCESS" {
+			t.Errorf("got %q, want SUCCESS", got)
+		}
+	})
+
+	t.Run("should return empty when no commits", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.Commits.Nodes = nil })
+
+		if got := rollupState(pr); got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("should return empty when rollup is nil", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.Commits.Nodes = []struct {
+				Commit struct {
+					StatusCheckRollup *struct{ State string }
+				}
+			}{{}}
+		})
+
+		if got := rollupState(pr); got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+	})
+}
+
 func TestReviewCode(t *testing.T) {
 	t.Run("should return none for drafts even when approved", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) { p.IsDraft = true; p.ReviewDecision = "APPROVED" })

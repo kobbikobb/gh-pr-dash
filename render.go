@@ -141,7 +141,15 @@ func renderTerminal(rows []Row, width int, color bool) string {
 				b.WriteString("\n")
 			}
 			tier = r.Tier
-			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
+			name := "?"
+			if tier >= 0 && tier < len(tierNames) {
+				name = tierNames[tier]
+			}
+			color := p.d
+			if tier >= 0 && tier < len(headColor) {
+				color = headColor[tier]
+			}
+			b.WriteString(p.b + color + name + p.z + "\n")
 		}
 
 		title := padRight(truncate(titles[i], titleW), titleW)

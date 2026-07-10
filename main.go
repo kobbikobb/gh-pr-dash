@@ -3,16 +3,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
-	"time"
-
-	"github.com/cli/go-gh/v2/pkg/api"
-	"golang.org/x/term"
 )
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
@@ -24,20 +17,6 @@ Usage: gh pr-dash [--org <name>] [--json] [--watch] [max]
   --watch        Refresh every minute
   max            Max PRs to fetch (default 100)
 `
-
-const searchQuery = `query($q:String!,$n:Int!){
-  search(query:$q,type:ISSUE,first:$n){
-    nodes{
-      ... on PullRequest{
-        number title url isDraft reviewDecision updatedAt mergeable
-        repository{ nameWithOwner }
-        comments{ totalCount }
-        latestOpinionatedReviews(first:20){ nodes{ state } }
-        commits(last:1){ nodes{ commit{ statusCheckRollup{ state } } } }
-      }
-    }
-  }
-}`
 
 type options struct {
 	org    string
@@ -63,51 +42,13 @@ func parseArgs(args []string) (options, bool) {
 		default:
 			if n, err := strconv.Atoi(args[i]); err == nil {
 				o.limit = n
+			} else {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+				return o, false
 			}
 		}
 	}
 	return o, true
-}
-
-func fetchPRs(limit int) ([]ghPR, error) {
-	client, err := api.DefaultGraphQLClient()
-	if err != nil {
-		return nil, err
-	}
-	var resp struct {
-		Search struct{ Nodes []ghPR }
-	}
-	vars := map[string]any{"q": "author:@me is:pr is:open", "n": limit}
-	if err := client.Do(searchQuery, vars, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Search.Nodes, nil
-}
-
-func fetchAndRender(opts options) error {
-	prs, err := fetchPRs(opts.limit)
-	if err != nil {
-		return err
-	}
-	rows := buildRows(prs, opts.org, time.Now())
-
-	if opts.asJSON {
-		out, err := json.Marshal(rows)
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(out))
-		return nil
-	}
-
-	fd := int(os.Stdout.Fd())
-	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
-	width := 120
-	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
-		width = w
-	}
-	fmt.Print(renderTerminal(rows, width, useColor))
-	return nil
 }
 
 func main() {
@@ -118,29 +59,11 @@ func main() {
 	}
 
 	if opts.watch {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			fmt.Print("\033[H")
-			if err := fetchAndRender(opts); err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-			}
-			fmt.Print("\033[J")
-
-			select {
-			case <-sig:
-				fmt.Println()
-				return
-			case <-ticker.C:
-			}
-		}
+		watchLoop(opts)
+		return
 	}
 
-	if err := fetchAndRender(opts); err != nil {
+	if err := fetchAndRender(os.Stdout, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
