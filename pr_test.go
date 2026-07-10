@@ -169,3 +169,31 @@ func TestBuildRows(t *testing.T) {
 		}
 	})
 }
+
+func TestFilterRows(t *testing.T) {
+	rows := []Row{
+		{Repo: "api", Ref: "api#1"},
+		{Repo: "web", Ref: "web#2"},
+		{Repo: "api", Ref: "api#3"},
+	}
+
+	t.Run("should return all rows when repo is empty", func(t *testing.T) {
+		if got := filterRows(rows, ""); len(got) != 3 {
+			t.Errorf("got %d rows, want 3", len(got))
+		}
+	})
+
+	t.Run("should filter to matching repo", func(t *testing.T) {
+		got := filterRows(rows, "api")
+
+		if len(got) != 2 || got[0].Ref != "api#1" || got[1].Ref != "api#3" {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	t.Run("should return nil when no matches", func(t *testing.T) {
+		if got := filterRows(rows, "nope"); got != nil {
+			t.Errorf("got %+v, want nil", got)
+		}
+	})
+}

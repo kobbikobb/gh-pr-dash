@@ -14,9 +14,10 @@ import (
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--json] [max]
+Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [max]
 
   --org <name>   Scope to a single org/owner
+  --repo <name>  Scope to a single repo
   --json         Emit raw JSON rows (for scripts)
   max            Max PRs to fetch (default 100)
 `
@@ -37,6 +38,7 @@ const searchQuery = `query($q:String!,$n:Int!){
 
 type options struct {
 	org    string
+	repo   string
 	limit  int
 	asJSON bool
 }
@@ -48,6 +50,10 @@ func parseArgs(args []string) (options, bool) {
 		case "--org":
 			if i++; i < len(args) {
 				o.org = args[i]
+			}
+		case "--repo":
+			if i++; i < len(args) {
+				o.repo = args[i]
 			}
 		case "--json":
 			o.asJSON = true
@@ -90,6 +96,7 @@ func main() {
 		os.Exit(1)
 	}
 	rows := buildRows(prs, opts.org, time.Now())
+	rows = filterRows(rows, opts.repo)
 
 	if opts.asJSON {
 		out, err := json.Marshal(rows)
