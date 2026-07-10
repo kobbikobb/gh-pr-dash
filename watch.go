@@ -27,19 +27,18 @@ func watchLoop(opts options) {
 	var errMsg string
 	var lastFetch, nextRefresh time.Time
 
-	fetch := func() {
-		prs, err := fetchPRs(opts.limit)
+	// Fetch off the render loop so the network never stalls the animation or a
+	// Ctrl-C; each fetch delivers its result over the channel as a select case.
+	results := make(chan fetchResult, 1)
+	startFetch := func() {
 		nextRefresh = time.Now().Add(opts.interval)
-		if err != nil {
-			errMsg = err.Error()
-			return
-		}
-		cachedRows = buildRows(prs, opts.org, time.Now())
-		lastFetch = time.Now()
-		errMsg = ""
+		go func() {
+			prs, err := fetchPRs(opts.limit)
+			results <- fetchResult{prs, err}
+		}()
 	}
 
-	fetch()
+	startFetch()
 
 	for {
 		// Detect the size every frame so a resize reflows immediately; a full
@@ -54,14 +53,27 @@ func watchLoop(opts options) {
 		select {
 		case <-sig:
 			return
+		case r := <-results:
+			if r.err != nil {
+				errMsg = r.err.Error()
+			} else {
+				cachedRows = buildRows(r.prs, opts.org, time.Now())
+				lastFetch = time.Now()
+				errMsg = ""
+			}
 		case <-dataTicker.C:
-			fetch()
+			startFetch()
 			tick++
 		case <-animTicker.C:
 			// Just animate (tick increments, no data fetch)
 			tick++
 		}
 	}
+}
+
+type fetchResult struct {
+	prs []ghPR
+	err error
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {
@@ -82,7 +94,11 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}
-	if !opts.asJSON {
+	switch {
+	case opts.asJSON:
+	case len(rows) == 0 && errMsg == "" && status == "":
+		out += p.d + "  loading…" + p.z + "\n"
+	default:
 		out += renderTerminal(rows, t.width, t.useColor)
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
