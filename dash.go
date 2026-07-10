@@ -26,7 +26,7 @@ const searchQuery = `query($q:String!,$n:Int!){
 }`
 
 type terminal struct {
-	width   int
+	width    int
 	useColor bool
 }
 

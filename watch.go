@@ -19,8 +19,8 @@ func watchLoop(opts options) {
 	defer animTicker.Stop()
 
 	tick := 0
+	lastWidth := 0
 	var cachedRows []Row
-	var cachedTerminal terminal
 
 	// Initial fetch
 	prs, err := fetchPRs(opts.limit)
@@ -29,11 +29,16 @@ func watchLoop(opts options) {
 	} else {
 		cachedRows = buildRows(prs, opts.org, time.Now())
 	}
-	cachedTerminal = detectTerminal()
 
 	for {
-		// Always render with current tick (for animation)
-		renderWatch(opts, tick, cachedRows, cachedTerminal)
+		// Detect the size every frame so a resize reflows immediately; a full
+		// clear on width change wipes the wrapped residue \033[J can't reach.
+		t := detectTerminal()
+		if t.width != lastWidth {
+			fmt.Print("\033[2J")
+			lastWidth = t.width
+		}
+		renderWatch(opts, tick, cachedRows, t)
 
 		select {
 		case <-sig:
@@ -47,7 +52,6 @@ func watchLoop(opts options) {
 			} else {
 				cachedRows = buildRows(prs, opts.org, time.Now())
 			}
-			cachedTerminal = detectTerminal()
 			tick++
 		case <-animTicker.C:
 			// Just animate (tick increments, no data fetch)
@@ -60,9 +64,7 @@ func renderWatch(opts options, tick int, rows []Row, t terminal) {
 	fmt.Print("\033[H")
 	header := renderHeader(tick, true, t.useColor, t.width)
 	var table string
-	if opts.asJSON {
-		table = ""
-	} else {
+	if !opts.asJSON {
 		table = renderTerminal(rows, t.width, t.useColor)
 	}
 	_, _ = fmt.Fprint(os.Stdout, header+table)

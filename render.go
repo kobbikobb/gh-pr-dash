@@ -104,6 +104,13 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	}
 	p := colors(color)
 
+	counts := make([]int, len(tierNames))
+	for _, r := range rows {
+		if r.Tier >= 0 && r.Tier < len(counts) {
+			counts[r.Tier]++
+		}
+	}
+
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
@@ -143,7 +150,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			tier = r.Tier
 			name := "?"
 			if tier >= 0 && tier < len(tierNames) {
-				name = tierNames[tier]
+				name = fmt.Sprintf("%s (%d)", tierNames[tier], counts[tier])
 			}
 			color := p.d
 			if tier >= 0 && tier < len(headColor) {

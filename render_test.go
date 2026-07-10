@@ -92,25 +92,35 @@ func TestRenderTerminal(t *testing.T) {
 }
 
 func TestRenderHeader(t *testing.T) {
-	t.Run("should render static header with box", func(t *testing.T) {
+	t.Run("should render static header box with wordmark", func(t *testing.T) {
 		out := renderHeader(0, false, false, 60)
 
 		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
-			t.Errorf("missing box drawing:\n%s", out)
+			t.Errorf("missing box:\n%s", out)
 		}
-		if !strings.Contains(out, "▄▄▄") {
-			t.Errorf("missing dash art:\n%s", out)
+		if !strings.Contains(out, "███") || !strings.Contains(out, appName) {
+			t.Errorf("missing wordmark:\n%s", out)
 		}
 	})
 
-	t.Run("should render watch header with spinner", func(t *testing.T) {
+	t.Run("should render watch header with spinner and clock", func(t *testing.T) {
 		out := renderHeader(0, true, false, 60)
 
 		if !strings.Contains(out, "⠋") {
 			t.Errorf("missing spinner:\n%s", out)
 		}
-		if !strings.Contains(out, "15:") {
+		if strings.Count(out, ":") < 2 {
 			t.Errorf("missing timestamp:\n%s", out)
+		}
+	})
+
+	t.Run("should fill the bar to the exact terminal width", func(t *testing.T) {
+		out := renderHeader(0, true, false, 72)
+
+		bar := strings.SplitN(out, "\n", 2)[0]
+
+		if got := len([]rune(bar)); got != 72 {
+			t.Errorf("bar width = %d, want 72:\n%q", got, bar)
 		}
 	})
 

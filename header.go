@@ -7,130 +7,86 @@ import (
 
 var spinner = [9]rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇'}
 
-var dashArt = []string{
-	`▄▄▄  ▄  ▄ ▄▄▄ ▄  ▄ ▄▄▄ ▄  ▄ ▄  ▄`,
-	`█▄▄  █▄█   █   █▄█   █ █▄▄█ █▄▄█`,
-	`▀▀▀  ▀ ▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀ ▀  ▀`,
+const appName = "gh pr-dash"
+
+// glyphs is a 5-row, 4-column block font. dashArt spells the wordmark from it.
+var glyphs = map[rune][5]string{
+	'P': {"███ ", "█  █", "███ ", "█   ", "█   "},
+	'R': {"███ ", "█  █", "███ ", "█ █ ", "█  █"},
+	'-': {"    ", "    ", " ██ ", "    ", "    "},
+	'D': {"███ ", "█  █", "█  █", "█  █", "███ "},
+	'A': {" ██ ", "█  █", "████", "█  █", "█  █"},
+	'S': {" ███", "█   ", " ██ ", "   █", "███ "},
+	'H': {"█  █", "█  █", "████", "█  █", "█  █"},
 }
 
-func repeat(ch rune, n int) string {
-	if n <= 0 {
-		return ""
+var dashArt = banner("PR-DASH")
+
+func banner(s string) []string {
+	rows := make([]string, 5)
+	for i := range rows {
+		parts := make([]string, 0, len(s))
+		for _, ch := range s {
+			parts = append(parts, glyphs[ch][i])
+		}
+		rows[i] = strings.Join(parts, " ")
 	}
-	return strings.Repeat(string(ch), n)
+	return rows
 }
 
+// renderHeader draws the wordmark inside a box. Under --watch the border and
+// each art row cycle colors for a wave; otherwise it renders in one steady color.
+// Padding is applied to plain runes so ANSI codes never skew the frame width.
 func renderHeader(tick int, watch bool, color bool, width int) string {
 	p := colors(color)
-
-	if !watch {
-		return renderStaticHeader(p, width)
-	}
-	return renderWatchHeader(tick, p, width)
-}
-
-func renderStaticHeader(p palette, width int) string {
 	if width < 40 {
 		width = 40
 	}
 	w := width
 
-	var b strings.Builder
-
-	// Top border
-	b.WriteString(p.c + "╔" + repeat('═', w-2) + "╗" + p.z + "\n")
-
-	// Empty line
-	b.WriteString(p.c + "║" + repeat(' ', w-2) + "║" + p.z + "\n")
-
-	// ASCII art lines - centered
-	for _, line := range dashArt {
-		lineW := len([]rune(line))
-		leftPad := (w - 2 - lineW) / 2
-		rightPad := w - 2 - lineW - leftPad
-		b.WriteString(p.c + "║" + p.z)
-		b.WriteString(repeat(' ', leftPad))
-		b.WriteString(p.b + line + p.z)
-		b.WriteString(repeat(' ', rightPad))
-		b.WriteString(p.c + "║" + p.z + "\n")
+	border := p.c
+	artColorAt := func(int) string { return p.c }
+	if watch {
+		bc := []string{p.c, p.y, p.g}
+		border = bc[(tick/3)%len(bc)]
+		art := []string{p.r, p.y, p.g, p.c}
+		artColorAt = func(i int) string { return art[(tick+i)%len(art)] }
 	}
-
-	// Empty line
-	b.WriteString(p.c + "║" + repeat(' ', w-2) + "║" + p.z + "\n")
-
-	// Subtitle
-	sub := "by kobbikobb"
-	subW := len([]rune(sub))
-	leftPad := (w - 2 - subW) / 2
-	rightPad := w - 2 - subW - leftPad
-	b.WriteString(p.c + "║" + p.z)
-	b.WriteString(repeat(' ', leftPad))
-	b.WriteString(p.d + sub + p.z)
-	b.WriteString(repeat(' ', rightPad))
-	b.WriteString(p.c + "║" + p.z + "\n")
-
-	// Bottom border
-	b.WriteString(p.c + "╚" + repeat('═', w-2) + "╝" + p.z + "\n")
-
-	return b.String() + "\n"
-}
-
-func renderWatchHeader(tick int, p palette, width int) string {
-	if width < 40 {
-		width = 40
-	}
-	w := width
-
-	spin := spinner[tick%len(spinner)]
-	now := time.Now().Format("15:04:05")
-
-	// Border color cycles
-	borderColors := []string{p.c, p.y, p.g}
-	bc := borderColors[(tick/2)%len(borderColors)]
-
-	// Art line colors cycle independently
-	artColors := []string{p.r, p.y, p.g, p.c}
 
 	var b strings.Builder
+	edge := border + "║" + p.z
 
-	// Top border
-	b.WriteString(bc + "╔" + repeat('═', w-2) + "╗" + p.z + "\n")
-
-	// Empty line
-	b.WriteString(bc + "║" + repeat(' ', w-2) + "║" + p.z + "\n")
-
-	// ASCII art lines - centered with color animation
-	for i, line := range dashArt {
-		lineW := len([]rune(line))
-		leftPad := (w - 2 - lineW) / 2
-		rightPad := w - 2 - lineW - leftPad
-		lc := artColors[(tick+i)%len(artColors)]
-		b.WriteString(bc + "║" + p.z)
-		b.WriteString(repeat(' ', leftPad))
-		b.WriteString(lc + p.b + line + p.z)
-		b.WriteString(repeat(' ', rightPad))
-		b.WriteString(bc + "║" + p.z + "\n")
+	center := func(vis int, colored string) {
+		left := (w - 2 - vis) / 2
+		if left < 0 {
+			left = 0
+		}
+		right := w - 2 - vis - left
+		if right < 0 {
+			right = 0
+		}
+		b.WriteString(edge + strings.Repeat(" ", left) + colored + strings.Repeat(" ", right) + edge + "\n")
 	}
 
-	// Empty line
-	b.WriteString(bc + "║" + repeat(' ', w-2) + "║" + p.z + "\n")
+	b.WriteString(border + "╔" + strings.Repeat("═", w-2) + "╗" + p.z + "\n")
+	b.WriteString(edge + strings.Repeat(" ", w-2) + edge + "\n")
 
-	// Status line: spinner on left, timestamp on right
-	statusW := w - 4
-	left := string(spin) + " "
-	right := now
-	mid := statusW - len([]rune(left)) - len([]rune(right))
-	if mid < 1 {
-		mid = 1
+	for i, row := range dashArt {
+		center(len([]rune(row)), artColorAt(i)+p.b+row+p.z)
 	}
-	b.WriteString(bc + "║" + p.z)
-	b.WriteString(p.g + left + p.z)
-	b.WriteString(repeat(' ', mid))
-	b.WriteString(p.d + right + p.z)
-	b.WriteString(bc + "║" + p.z + "\n")
 
-	// Bottom border
-	b.WriteString(bc + "╚" + repeat('═', w-2) + "╝" + p.z + "\n")
+	if watch {
+		spin := string(spinner[tick%len(spinner)])
+		clock := time.Now().Format("15:04:05")
+		mid := w - 2 - 4 - (len(clock) + 2)
+		if mid < 1 {
+			mid = 1
+		}
+		b.WriteString(edge + "  " + p.g + spin + p.z + " " + strings.Repeat(" ", mid) + p.d + clock + p.z + "  " + edge + "\n")
+	} else {
+		center(len(appName), p.d+appName+p.z)
+	}
 
+	b.WriteString(border + "╚" + strings.Repeat("═", w-2) + "╝" + p.z + "\n")
 	return b.String() + "\n"
 }
