@@ -13,7 +13,7 @@ func watchLoop(opts options) {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
 
-	dataTicker := time.NewTicker(1 * time.Minute)
+	dataTicker := time.NewTicker(opts.interval)
 	animTicker := time.NewTicker(200 * time.Millisecond)
 	defer dataTicker.Stop()
 	defer animTicker.Stop()
