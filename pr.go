@@ -54,6 +54,7 @@ type Row struct {
 const (
 	tierNeedsAction = iota
 	tierReady
+	tierBuilding
 	tierWaiting
 	tierDrafts
 	tierMerged
@@ -127,7 +128,10 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 		return tierDrafts
 	case ci == "fail" || merge == "conflict":
 		return tierNeedsAction
-	case review == "approved" && ci == "ok" && merge == "clean":
+	case review == "approved" && merge == "clean":
+		if ci == "pending" {
+			return tierBuilding
+		}
 		return tierReady
 	default:
 		return tierWaiting

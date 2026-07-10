@@ -9,6 +9,7 @@ import (
 var tierNames = []string{
 	"Needs action — CI fail / conflict",
 	"Ready to merge",
+	"Waiting on CI",
 	"Waiting on review",
 	"Drafts",
 	"Recently merged — last 24h",
@@ -153,7 +154,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.d, p.c}
+	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.c}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {

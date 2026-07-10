@@ -141,6 +141,22 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
+	t.Run("should rank approved+clean with no checks as ready", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED" })
+
+		if classify(pr, time.Now()).Tier != tierReady {
+			t.Error("want ready when there are no checks to wait on")
+		}
+	})
+
+	t.Run("should rank approved+clean with pending CI as waiting-on-CI", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; setRollup(p, "PENDING") })
+
+		if classify(pr, time.Now()).Tier != tierBuilding {
+			t.Error("want waiting-on-CI")
+		}
+	})
+
 	t.Run("should rank review-required as waiting", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) { p.ReviewDecision = "REVIEW_REQUIRED"; setRollup(p, "SUCCESS") })
 
