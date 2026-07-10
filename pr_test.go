@@ -177,6 +177,45 @@ func TestClassify(t *testing.T) {
 	})
 }
 
+func TestBuildMergedRows(t *testing.T) {
+	now := time.Now()
+
+	t.Run("should mark merged PRs with the merged tier and marker", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.Number = 7; p.MergedAt = now.Add(-2 * time.Hour) })
+
+		rows := buildMergedRows([]ghPR{pr}, "", now)
+
+		if len(rows) != 1 {
+			t.Fatalf("got %d rows", len(rows))
+		}
+		if rows[0].Tier != tierMerged || rows[0].Merge != "merged" {
+			t.Errorf("tier = %d, merge = %q", rows[0].Tier, rows[0].Merge)
+		}
+	})
+
+	t.Run("should keep search order (newest first)", func(t *testing.T) {
+		newer := prWith(func(p *ghPR) { p.Number = 1 })
+		older := prWith(func(p *ghPR) { p.Number = 2 })
+
+		rows := buildMergedRows([]ghPR{newer, older}, "", now)
+
+		if rows[0].Ref != "repo#1" || rows[1].Ref != "repo#2" {
+			t.Errorf("order changed: %q, %q", rows[0].Ref, rows[1].Ref)
+		}
+	})
+
+	t.Run("should filter by owner prefix", func(t *testing.T) {
+		mine := prWith(func(p *ghPR) { p.Repository.NameWithOwner = "acme/api" })
+		other := prWith(func(p *ghPR) { p.Repository.NameWithOwner = "other/api" })
+
+		rows := buildMergedRows([]ghPR{mine, other}, "acme", now)
+
+		if len(rows) != 1 || rows[0].Ref != "api#1" {
+			t.Errorf("owner filter failed: %+v", rows)
+		}
+	})
+}
+
 func TestBuildRows(t *testing.T) {
 	now := time.Now()
 

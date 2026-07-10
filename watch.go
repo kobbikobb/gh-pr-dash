@@ -33,8 +33,8 @@ func watchLoop(opts options) {
 	startFetch := func() {
 		nextRefresh = time.Now().Add(opts.interval)
 		go func() {
-			prs, err := fetchPRs(opts.limit)
-			results <- fetchResult{prs, err}
+			rows, err := fetchRows(opts, time.Now())
+			results <- fetchResult{rows, err}
 		}()
 	}
 
@@ -57,7 +57,7 @@ func watchLoop(opts options) {
 			if r.err != nil {
 				errMsg = r.err.Error()
 			} else {
-				cachedRows = buildRows(r.prs, opts.org, time.Now())
+				cachedRows = r.rows
 				lastFetch = time.Now()
 				errMsg = ""
 			}
@@ -72,8 +72,8 @@ func watchLoop(opts options) {
 }
 
 type fetchResult struct {
-	prs []ghPR
-	err error
+	rows []Row
+	err  error
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {

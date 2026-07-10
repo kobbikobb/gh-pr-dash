@@ -15,7 +15,7 @@ const searchQuery = `query($q:String!,$n:Int!){
   search(query:$q,type:ISSUE,first:$n){
     nodes{
       ... on PullRequest{
-        number title url isDraft reviewDecision updatedAt mergeable
+        number title url isDraft reviewDecision updatedAt mergedAt mergeable
         repository{ nameWithOwner }
         comments{ totalCount }
         latestOpinionatedReviews(first:20){ nodes{ state } }
@@ -24,6 +24,8 @@ const searchQuery = `query($q:String!,$n:Int!){
     }
   }
 }`
+
+const mergedWindow = 24 * time.Hour
 
 type terminal struct {
 	width    int
@@ -44,7 +46,7 @@ func detectTerminal() terminal {
 	return terminal{width: width, height: height, useColor: useColor}
 }
 
-func fetchPRs(limit int) ([]ghPR, error) {
+func fetchPRs(query string, limit int) ([]ghPR, error) {
 	client, err := api.DefaultGraphQLClient()
 	if err != nil {
 		return nil, err
@@ -52,19 +54,36 @@ func fetchPRs(limit int) ([]ghPR, error) {
 	var resp struct {
 		Search struct{ Nodes []ghPR }
 	}
-	vars := map[string]any{"q": "author:@me is:pr is:open", "n": limit}
+	vars := map[string]any{"q": query, "n": limit}
 	if err := client.Do(searchQuery, vars, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Search.Nodes, nil
 }
 
+// fetchRows returns the ranked open PRs followed by PRs merged within the
+// window; tierMerged sorts last, so appending keeps the sections in order.
+func fetchRows(opts options, now time.Time) ([]Row, error) {
+	open, err := fetchPRs("author:@me is:pr is:open", opts.limit)
+	if err != nil {
+		return nil, err
+	}
+	rows := buildRows(open, opts.org, now)
+
+	since := now.Add(-mergedWindow).UTC().Format("2006-01-02T15:04:05Z")
+	mergedQ := fmt.Sprintf("author:@me is:pr is:merged merged:>=%s sort:updated-desc", since)
+	merged, err := fetchPRs(mergedQ, opts.limit)
+	if err != nil {
+		return nil, err
+	}
+	return append(rows, buildMergedRows(merged, opts.org, now)...), nil
+}
+
 func fetchAndRender(w io.Writer, opts options) error {
-	prs, err := fetchPRs(opts.limit)
+	rows, err := fetchRows(opts, time.Now())
 	if err != nil {
 		return err
 	}
-	rows := buildRows(prs, opts.org, time.Now())
 
 	if opts.asJSON {
 		out, err := json.Marshal(rows)

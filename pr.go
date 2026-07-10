@@ -15,6 +15,7 @@ type ghPR struct {
 	IsDraft        bool
 	ReviewDecision string
 	UpdatedAt      time.Time
+	MergedAt       time.Time
 	Mergeable      string
 	Repository     struct{ NameWithOwner string }
 	Comments       struct{ TotalCount int }
@@ -55,6 +56,7 @@ const (
 	tierReady
 	tierWaiting
 	tierDrafts
+	tierMerged
 )
 
 func ciCode(state string) string {
@@ -137,22 +139,57 @@ func classify(pr ghPR, now time.Time) Row {
 	merge := mergeCode(pr.Mergeable)
 	review := reviewCode(pr)
 
-	short := pr.Repository.NameWithOwner
-	if i := strings.Index(short, "/"); i >= 0 {
-		short = short[i+1:]
-	}
-
 	return Row{
 		Tier:     tierFor(pr, ci, merge, review),
 		IdleDays: int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:       ci,
 		Merge:    merge,
 		Review:   review,
-		Ref:      short + "#" + strconv.Itoa(pr.Number),
+		Ref:      shortRef(pr),
 		URL:      pr.URL,
 		Comments: pr.Comments.TotalCount,
 		Title:    pr.Title,
 	}
+}
+
+func shortRef(pr ghPR) string {
+	short := pr.Repository.NameWithOwner
+	if i := strings.Index(short, "/"); i >= 0 {
+		short = short[i+1:]
+	}
+	return short + "#" + strconv.Itoa(pr.Number)
+}
+
+// classifyMerged builds a row for an already-merged PR; CI/review status is
+// no longer actionable, so only the merge marker and merge age are shown.
+func classifyMerged(pr ghPR, now time.Time) Row {
+	return Row{
+		Tier:     tierMerged,
+		IdleDays: int(now.Sub(pr.MergedAt).Hours() / 24),
+		CI:       "none",
+		Merge:    "merged",
+		Review:   "none",
+		Ref:      shortRef(pr),
+		URL:      pr.URL,
+		Comments: pr.Comments.TotalCount,
+		Title:    pr.Title,
+	}
+}
+
+// buildMergedRows keeps the search order (newest first) so the freshest merge
+// sits at the top of the section.
+func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
+	rows := make([]Row, 0, len(prs))
+	for _, pr := range prs {
+		if pr.Number == 0 {
+			continue
+		}
+		if org != "" && !strings.HasPrefix(pr.Repository.NameWithOwner, org+"/") {
+			continue
+		}
+		rows = append(rows, classifyMerged(pr, now))
+	}
+	return rows
 }
 
 // buildRows classifies, filters by owner, and ranks: tier ascending, then
