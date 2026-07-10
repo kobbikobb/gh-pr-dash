@@ -179,3 +179,16 @@ func buildRows(prs []ghPR, org string, now time.Time) []Row {
 	})
 	return rows
 }
+
+func filterRows(rows []Row, repo string) []Row {
+	if repo == "" {
+		return rows
+	}
+	var filtered []Row
+	for _, r := range rows {
+		if r.Repo == repo {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
