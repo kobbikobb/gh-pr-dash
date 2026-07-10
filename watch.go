@@ -25,14 +25,17 @@ func watchLoop(opts options) {
 	lastWidth := 0
 	var cachedRows []Row
 	var errMsg string
+	var lastFetch, nextRefresh time.Time
 
 	fetch := func() {
 		prs, err := fetchPRs(opts.limit)
+		nextRefresh = time.Now().Add(opts.interval)
 		if err != nil {
 			errMsg = err.Error()
 			return
 		}
 		cachedRows = buildRows(prs, opts.org, time.Now())
+		lastFetch = time.Now()
 		errMsg = ""
 	}
 
@@ -46,7 +49,7 @@ func watchLoop(opts options) {
 			fmt.Print("\033[2J")
 			lastWidth = t.width
 		}
-		renderWatch(opts, tick, cachedRows, errMsg, t)
+		renderWatch(opts, tick, cachedRows, errMsg, refreshStatus(lastFetch, nextRefresh), t)
 
 		select {
 		case <-sig:
@@ -61,10 +64,21 @@ func watchLoop(opts options) {
 	}
 }
 
-func renderWatch(opts options, tick int, rows []Row, errMsg string, t terminal) {
+func refreshStatus(lastFetch, nextRefresh time.Time) string {
+	if lastFetch.IsZero() {
+		return ""
+	}
+	secs := int(time.Until(nextRefresh).Seconds())
+	if secs < 0 {
+		secs = 0
+	}
+	return fmt.Sprintf("refreshed %s · next %ds", lastFetch.Format("15:04"), secs)
+}
+
+func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t terminal) {
 	fmt.Print("\033[H")
 	p := colors(t.useColor)
-	out := renderHeader(tick, true, t.useColor, t.width, t.height)
+	out := renderHeader(tick, true, t.useColor, t.width, t.height, status)
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}

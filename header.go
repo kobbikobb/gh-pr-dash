@@ -1,11 +1,6 @@
 package main
 
-import (
-	"strings"
-	"time"
-)
-
-var spinner = [9]rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇'}
+import "strings"
 
 const appName = "gh pr-dash"
 
@@ -38,9 +33,10 @@ func banner(s string) []string {
 // each art row cycle colors for a wave; otherwise it renders in one steady color.
 // Padding is applied to plain runes so ANSI codes never skew the frame width.
 // On short terminals the box would eat the view, so it collapses to one line.
-func renderHeader(tick int, watch bool, color bool, width, height int) string {
+// status is the refresh line shown under --watch (empty otherwise).
+func renderHeader(tick int, watch bool, color bool, width, height int, status string) string {
 	if height < 16 {
-		return renderCompactHeader(tick, watch, color, width)
+		return renderCompactHeader(tick, watch, color, width, status)
 	}
 
 	p := colors(color)
@@ -81,13 +77,7 @@ func renderHeader(tick int, watch bool, color bool, width, height int) string {
 	}
 
 	if watch {
-		spin := string(spinner[tick%len(spinner)])
-		clock := time.Now().Format("15:04:05")
-		mid := w - 2 - 4 - (len(clock) + 2)
-		if mid < 1 {
-			mid = 1
-		}
-		b.WriteString(edge + "  " + p.g + spin + p.z + " " + strings.Repeat(" ", mid) + p.d + clock + p.z + "  " + edge + "\n")
+		center(len([]rune(status)), p.d+status+p.z)
 	} else {
 		center(len(appName), p.d+appName+p.z)
 	}
@@ -96,7 +86,7 @@ func renderHeader(tick int, watch bool, color bool, width, height int) string {
 	return b.String() + "\n"
 }
 
-func renderCompactHeader(tick int, watch bool, color bool, width int) string {
+func renderCompactHeader(tick int, watch bool, color bool, width int, status string) string {
 	p := colors(color)
 	if width < 20 {
 		width = 20
@@ -106,10 +96,8 @@ func renderCompactHeader(tick int, watch bool, color bool, width int) string {
 	right, rightVis := "", 0
 	if watch {
 		border = []string{p.c, p.y, p.g}[(tick/3)%3]
-		spin := string(spinner[tick%len(spinner)])
-		clock := time.Now().Format("15:04:05")
-		right = "  " + p.g + spin + p.z + " " + p.d + clock + p.z
-		rightVis = 2 + 1 + 1 + len(clock)
+		right = "  " + p.d + status + p.z
+		rightVis = 2 + len([]rune(status))
 	}
 
 	name := " " + appName + " "
