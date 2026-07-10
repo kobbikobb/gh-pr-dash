@@ -7,7 +7,7 @@ import (
 )
 
 var tierNames = []string{
-	"Needs action (CI fail / conflict)",
+	"Needs action — CI fail / conflict",
 	"Ready to merge",
 	"Waiting on review",
 	"Drafts",
