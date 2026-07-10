@@ -75,7 +75,7 @@ func main() {
 		return
 	}
 
-	if err := fetchAndRender(os.Stdout, opts, 0); err != nil {
+	if err := fetchAndRender(os.Stdout, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

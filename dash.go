@@ -59,7 +59,7 @@ func fetchPRs(limit int) ([]ghPR, error) {
 	return resp.Search.Nodes, nil
 }
 
-func fetchAndRender(w io.Writer, opts options, tick int) error {
+func fetchAndRender(w io.Writer, opts options) error {
 	prs, err := fetchPRs(opts.limit)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func fetchAndRender(w io.Writer, opts options, tick int) error {
 	}
 
 	t := detectTerminal()
-	header := renderHeader(tick, opts.watch, t.useColor, t.width, t.height, "")
+	header := renderHeader(0, opts.watch, t.useColor, t.width, t.height, "")
 	_, err = fmt.Fprint(w, header+renderTerminal(rows, t.width, t.useColor))
 	return err
 }

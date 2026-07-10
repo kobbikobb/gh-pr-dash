@@ -17,6 +17,14 @@ var glyphs = map[rune][5]string{
 
 var dashArt = banner("PR-DASH")
 
+// borderColor cycles the frame through cyan→yellow→green under --watch.
+func borderColor(tick int, watch bool, p palette) string {
+	if !watch {
+		return p.c
+	}
+	return []string{p.c, p.y, p.g}[(tick/3)%3]
+}
+
 func banner(s string) []string {
 	rows := make([]string, 5)
 	for i := range rows {
@@ -45,11 +53,9 @@ func renderHeader(tick int, watch bool, color bool, width, height int, status st
 	}
 	w := width
 
-	border := p.c
+	border := borderColor(tick, watch, p)
 	artColorAt := func(int) string { return p.c }
 	if watch {
-		bc := []string{p.c, p.y, p.g}
-		border = bc[(tick/3)%len(bc)]
 		art := []string{p.r, p.y, p.g, p.c}
 		artColorAt = func(i int) string { return art[(tick+i)%len(art)] }
 	}
@@ -92,10 +98,9 @@ func renderCompactHeader(tick int, watch bool, color bool, width int, status str
 		width = 20
 	}
 
-	border := p.c
+	border := borderColor(tick, watch, p)
 	right, rightVis := "", 0
 	if watch {
-		border = []string{p.c, p.y, p.g}[(tick/3)%3]
 		right = "  " + p.d + status + p.z
 		rightVis = 2 + len([]rune(status))
 	}
