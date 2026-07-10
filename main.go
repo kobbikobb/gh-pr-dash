@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -15,10 +17,11 @@ import (
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--json] [max]
+Usage: gh pr-dash [--org <name>] [--json] [--watch] [max]
 
   --org <name>   Scope to a single org/owner
   --json         Emit raw JSON rows (for scripts)
+  --watch        Refresh every minute
   max            Max PRs to fetch (default 100)
 `
 
@@ -40,6 +43,7 @@ type options struct {
 	org    string
 	limit  int
 	asJSON bool
+	watch  bool
 }
 
 func parseArgs(args []string) (options, bool) {
@@ -52,6 +56,8 @@ func parseArgs(args []string) (options, bool) {
 			}
 		case "--json":
 			o.asJSON = true
+		case "--watch":
+			o.watch = true
 		case "-h", "--help":
 			return o, false
 		default:
@@ -78,28 +84,20 @@ func fetchPRs(limit int) ([]ghPR, error) {
 	return resp.Search.Nodes, nil
 }
 
-func main() {
-	opts, ok := parseArgs(os.Args[1:])
-	if !ok {
-		fmt.Print(usage)
-		return
-	}
-
+func fetchAndRender(opts options) error {
 	prs, err := fetchPRs(opts.limit)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return err
 	}
 	rows := buildRows(prs, opts.org, time.Now())
 
 	if opts.asJSON {
 		out, err := json.Marshal(rows)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Println(string(out))
-		return
+		return nil
 	}
 
 	fd := int(os.Stdout.Fd())
@@ -109,4 +107,41 @@ func main() {
 		width = w
 	}
 	fmt.Print(renderTerminal(rows, width, useColor))
+	return nil
+}
+
+func main() {
+	opts, ok := parseArgs(os.Args[1:])
+	if !ok {
+		fmt.Print(usage)
+		return
+	}
+
+	if opts.watch {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			fmt.Print("\033[H")
+			if err := fetchAndRender(opts); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+			}
+			fmt.Print("\033[J")
+
+			select {
+			case <-sig:
+				fmt.Println()
+				return
+			case <-ticker.C:
+			}
+		}
+	}
+
+	if err := fetchAndRender(opts); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 }
