@@ -43,7 +43,7 @@ func banner(s string) []string {
 // On short terminals the box would eat the view, so it collapses to one line.
 // status is the refresh line shown under --watch (empty otherwise).
 func renderHeader(tick int, watch bool, color bool, width, height int, status string) string {
-	if height < 16 {
+	if height < 16 || width < 40 {
 		return renderCompactHeader(tick, watch, color, width, status)
 	}
 

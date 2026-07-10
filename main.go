@@ -52,13 +52,21 @@ func parseArgs(args []string) (options, bool) {
 		case "-h", "--help":
 			return o, false
 		default:
-			if n, err := strconv.Atoi(args[i]); err == nil {
-				o.limit = n
-			} else {
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 				return o, false
 			}
+			if n <= 0 {
+				fmt.Fprintf(os.Stderr, "max must be positive: %s\n", args[i])
+				return o, false
+			}
+			o.limit = n
 		}
+	}
+	if o.watch && o.asJSON {
+		fmt.Fprintln(os.Stderr, "--watch and --json cannot be combined")
+		return o, false
 	}
 	return o, true
 }
