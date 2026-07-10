@@ -141,6 +141,30 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
+	t.Run("should rank approved+clean with no checks and a clean merge state as ready", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; p.MergeStateStatus = "CLEAN" })
+
+		if classify(pr, time.Now()).Tier != tierReady {
+			t.Error("want ready when there are no checks to wait on")
+		}
+	})
+
+	t.Run("should rank approved+clean blocked by unreported checks as waiting-on-CI", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; p.MergeStateStatus = "BLOCKED" })
+
+		if classify(pr, time.Now()).Tier != tierBuilding {
+			t.Error("want waiting-on-CI when required checks have not reported")
+		}
+	})
+
+	t.Run("should rank approved+clean with pending CI as waiting-on-CI", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; setRollup(p, "PENDING") })
+
+		if classify(pr, time.Now()).Tier != tierBuilding {
+			t.Error("want waiting-on-CI")
+		}
+	})
+
 	t.Run("should rank review-required as waiting", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) { p.ReviewDecision = "REVIEW_REQUIRED"; setRollup(p, "SUCCESS") })
 
@@ -173,6 +197,45 @@ func TestClassify(t *testing.T) {
 		}
 		if row.Ref != "repo#42" {
 			t.Errorf("ref = %q, want repo#42", row.Ref)
+		}
+	})
+}
+
+func TestBuildMergedRows(t *testing.T) {
+	now := time.Now()
+
+	t.Run("should mark merged PRs with the merged tier and marker", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.Number = 7; p.MergedAt = now.Add(-2 * time.Hour) })
+
+		rows := buildMergedRows([]ghPR{pr}, "", now)
+
+		if len(rows) != 1 {
+			t.Fatalf("got %d rows", len(rows))
+		}
+		if rows[0].Tier != tierMerged || rows[0].Merge != "merged" {
+			t.Errorf("tier = %d, merge = %q", rows[0].Tier, rows[0].Merge)
+		}
+	})
+
+	t.Run("should keep search order (newest first)", func(t *testing.T) {
+		newer := prWith(func(p *ghPR) { p.Number = 1 })
+		older := prWith(func(p *ghPR) { p.Number = 2 })
+
+		rows := buildMergedRows([]ghPR{newer, older}, "", now)
+
+		if rows[0].Ref != "repo#1" || rows[1].Ref != "repo#2" {
+			t.Errorf("order changed: %q, %q", rows[0].Ref, rows[1].Ref)
+		}
+	})
+
+	t.Run("should filter by owner prefix", func(t *testing.T) {
+		mine := prWith(func(p *ghPR) { p.Repository.NameWithOwner = "acme/api" })
+		other := prWith(func(p *ghPR) { p.Repository.NameWithOwner = "other/api" })
+
+		rows := buildMergedRows([]ghPR{mine, other}, "acme", now)
+
+		if len(rows) != 1 || rows[0].Ref != "api#1" {
+			t.Errorf("owner filter failed: %+v", rows)
 		}
 	})
 }

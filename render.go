@@ -9,8 +9,10 @@ import (
 var tierNames = []string{
 	"Needs action — CI fail / conflict",
 	"Ready to merge",
+	"Waiting on CI",
 	"Waiting on review",
 	"Drafts",
+	"Recently merged — last 24h",
 }
 
 type palette struct{ b, d, r, g, y, c, z string }
@@ -71,6 +73,8 @@ func mergeColor(code string, p palette) string {
 		return p.r
 	case "unknown":
 		return p.y
+	case "merged":
+		return p.c
 	default:
 		return p.d
 	}
@@ -150,7 +154,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.d}
+	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {
@@ -179,7 +183,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, title, url)
 	}
-	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready%s\n",
-		p.d, len(rows), counts[tierNeedsAction], counts[tierReady], p.z)
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
 	return b.String()
 }

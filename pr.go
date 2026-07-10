@@ -9,15 +9,17 @@ import (
 
 // ghPR is the shape returned by the GitHub GraphQL search query.
 type ghPR struct {
-	Number         int
-	Title          string
-	URL            string
-	IsDraft        bool
-	ReviewDecision string
-	UpdatedAt      time.Time
-	Mergeable      string
-	Repository     struct{ NameWithOwner string }
-	Comments       struct{ TotalCount int }
+	Number           int
+	Title            string
+	URL              string
+	IsDraft          bool
+	ReviewDecision   string
+	UpdatedAt        time.Time
+	MergedAt         time.Time
+	Mergeable        string
+	MergeStateStatus string
+	Repository       struct{ NameWithOwner string }
+	Comments         struct{ TotalCount int }
 
 	LatestOpinionatedReviews struct {
 		Nodes []struct{ State string }
@@ -35,7 +37,7 @@ type ghPR struct {
 // not display strings, so each renderer can style them independently.
 //
 //	ci:     ok | fail | pending | none
-//	merge:  clean | conflict | unknown
+//	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
 type Row struct {
 	Tier     int    `json:"tier"`
@@ -53,8 +55,10 @@ type Row struct {
 const (
 	tierNeedsAction = iota
 	tierReady
+	tierBuilding
 	tierWaiting
 	tierDrafts
+	tierMerged
 )
 
 func ciCode(state string) string {
@@ -125,8 +129,20 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 		return tierDrafts
 	case ci == "fail" || merge == "conflict":
 		return tierNeedsAction
-	case review == "approved" && ci == "ok" && merge == "clean":
-		return tierReady
+	case review == "approved" && merge == "clean":
+		switch ci {
+		case "pending":
+			return tierBuilding
+		case "ok":
+			return tierReady
+		default:
+			// No rollup: ready only when GitHub says nothing blocks the merge;
+			// a non-CLEAN state means required checks just haven't reported yet.
+			if pr.MergeStateStatus == "CLEAN" {
+				return tierReady
+			}
+			return tierBuilding
+		}
 	default:
 		return tierWaiting
 	}
@@ -137,22 +153,56 @@ func classify(pr ghPR, now time.Time) Row {
 	merge := mergeCode(pr.Mergeable)
 	review := reviewCode(pr)
 
-	short := pr.Repository.NameWithOwner
-	if i := strings.Index(short, "/"); i >= 0 {
-		short = short[i+1:]
-	}
-
 	return Row{
 		Tier:     tierFor(pr, ci, merge, review),
 		IdleDays: int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:       ci,
 		Merge:    merge,
 		Review:   review,
-		Ref:      short + "#" + strconv.Itoa(pr.Number),
+		Ref:      shortRef(pr),
 		URL:      pr.URL,
 		Comments: pr.Comments.TotalCount,
 		Title:    pr.Title,
 	}
+}
+
+func shortRef(pr ghPR) string {
+	short := pr.Repository.NameWithOwner
+	if i := strings.Index(short, "/"); i >= 0 {
+		short = short[i+1:]
+	}
+	return short + "#" + strconv.Itoa(pr.Number)
+}
+
+// classifyMerged builds a row for an already-merged PR; CI/review status is
+// no longer actionable, so only the merge marker and merge age are shown.
+func classifyMerged(pr ghPR, now time.Time) Row {
+	return Row{
+		Tier:     tierMerged,
+		IdleDays: int(now.Sub(pr.MergedAt).Hours() / 24),
+		CI:       "none",
+		Merge:    "merged",
+		Review:   "none",
+		Ref:      shortRef(pr),
+		URL:      pr.URL,
+		Comments: pr.Comments.TotalCount,
+		Title:    pr.Title,
+	}
+}
+
+// buildMergedRows preserves the search order (most recently updated first).
+func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
+	rows := make([]Row, 0, len(prs))
+	for _, pr := range prs {
+		if pr.Number == 0 {
+			continue
+		}
+		if org != "" && !strings.HasPrefix(pr.Repository.NameWithOwner, org+"/") {
+			continue
+		}
+		rows = append(rows, classifyMerged(pr, now))
+	}
+	return rows
 }
 
 // buildRows classifies, filters by owner, and ranks: tier ascending, then
