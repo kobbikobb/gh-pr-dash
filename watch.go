@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -134,6 +135,14 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 }
 
 func openURL(url string) {
-	cmd := exec.Command("open", url)
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
 	_ = cmd.Start()
 }
