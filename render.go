@@ -114,7 +114,9 @@ func reviewText(code string) string {
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int, color bool) string {
+// When showURL is false the URL column is omitted (used in watch mode where
+// digit keys replace it).
+func renderTerminal(rows []Row, width int, color bool, showURL bool) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
@@ -143,8 +145,10 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		if n := len([]rune(t)); n > longest {
 			longest = n
 		}
-		if n := len([]rune(r.URL)); n > urlW {
-			urlW = n
+		if showURL {
+			if n := len([]rune(r.URL)); n > urlW {
+				urlW = n
+			}
 		}
 		if n := len([]rune(r.Repository)); n > repoW {
 			repoW = n
@@ -152,6 +156,9 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	}
 	prefixW := fixedW + repoW + 1 // repo column + spaces
 	titleW := width - prefixW - 2 - urlW
+	if urlW == 0 {
+		titleW = width - prefixW
+	}
 	if titleW > longest {
 		titleW = longest
 	}
@@ -188,10 +195,15 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		repo := p.u + padRight(truncate(r.Repository, repoW), repoW) + p.z
-		url := p.m + r.URL + p.z
 
-		fmt.Fprintf(&b, " %s %s %s %s %s %s %s  %s\n",
-			num, ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
+		if showURL {
+			url := p.m + r.URL + p.z
+			fmt.Fprintf(&b, " %s %s %s %s %s %s %s  %s\n",
+				num, ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
+		} else {
+			fmt.Fprintf(&b, " %s %s %s %s %s %s %s\n",
+				num, ciGlyph(r.CI, p), merge, review, idle, repo, title)
+		}
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)

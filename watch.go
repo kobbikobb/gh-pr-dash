@@ -128,7 +128,7 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 		if opts.repo != "" && len(filtered) == 0 {
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
-		out += renderTerminal(filtered, t.width, t.useColor)
+		out += renderTerminal(filtered, t.width, t.useColor, false)
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
