@@ -7,12 +7,19 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 func watchLoop(opts options) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
+
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err == nil {
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
+	}
 
 	keys := make(chan byte, 1)
 	go func() {
