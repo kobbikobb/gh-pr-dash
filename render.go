@@ -7,15 +7,20 @@ import (
 )
 
 var tierNames = []string{
-	"Needs action (CI fail / conflict)",
+	"Needs action — CI fail / conflict",
 	"Ready to merge",
+	"Waiting on CI",
 	"Waiting on review",
 	"Drafts",
+	"Recently merged — last 24h",
 }
 
 type palette struct{ b, d, r, g, y, c, u, m, z string }
 
-func colors() palette {
+func colors(on bool) palette {
+	if !on {
+		return palette{}
+	}
 	return palette{
 		b: "\033[1m", d: "\033[2m", r: "\033[31m",
 		g: "\033[32m", y: "\033[33m", c: "\033[36m",
@@ -69,6 +74,8 @@ func mergeColor(code string, p palette) string {
 		return p.r
 	case "unknown":
 		return p.y
+	case "merged":
+		return p.c
 	default:
 		return p.d
 	}
@@ -87,6 +94,17 @@ func reviewColor(code string, p palette) string {
 	}
 }
 
+func idleColor(days int, p palette) string {
+	switch {
+	case days >= 14:
+		return p.r
+	case days >= 7:
+		return p.y
+	default:
+		return p.d
+	}
+}
+
 func reviewText(code string) string {
 	if code == "none" {
 		return "·"
@@ -96,11 +114,18 @@ func reviewText(code string) string {
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int) string {
+func renderTerminal(rows []Row, width int, color bool) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
-	p := colors()
+	p := colors(color)
+
+	counts := make([]int, len(tierNames))
+	for _, r := range rows {
+		if r.Tier >= 0 && r.Tier < len(counts) {
+			counts[r.Tier]++
+		}
+	}
 
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
@@ -121,7 +146,7 @@ func renderTerminal(rows []Row, width int) string {
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
-		if n := len([]rune(r.Repo)); n > repoW {
+		if n := len([]rune(r.Repository)); n > repoW {
 			repoW = n
 		}
 	}
@@ -134,7 +159,7 @@ func renderTerminal(rows []Row, width int) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.d}
+	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {
@@ -143,18 +168,28 @@ func renderTerminal(rows []Row, width int) string {
 				b.WriteString("\n")
 			}
 			tier = r.Tier
-			b.WriteString(p.b + headColor[tier] + tierNames[tier] + p.z + "\n")
+			name := "?"
+			if tier >= 0 && tier < len(tierNames) {
+				name = fmt.Sprintf("%s (%d)", tierNames[tier], counts[tier])
+			}
+			color := p.d
+			if tier >= 0 && tier < len(headColor) {
+				color = headColor[tier]
+			}
+			b.WriteString(p.b + color + name + p.z + "\n")
 		}
 
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
-		idle := padLeft(strconv.Itoa(r.IdleDays)+"d", 4)
-		repo := p.u + padRight(truncate(r.Repo, repoW), repoW) + p.z
+		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
+		repo := p.u + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.m + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
 	}
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
 	return b.String()
 }

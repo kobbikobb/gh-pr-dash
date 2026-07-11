@@ -3,48 +3,35 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/cli/go-gh/v2/pkg/api"
 )
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [max]
+Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [--watch] [--interval <dur>] [max]
 
-  --org <name>   Scope to a single org/owner
-  --repo <name>  Scope to a single repo
-  --json         Emit raw JSON rows (for scripts)
-  max            Max PRs to fetch (default 100)
+  --org <name>       Scope to a single org/owner
+  --repo <name>      Scope to a single repo
+  --json             Emit raw JSON rows (for scripts)
+  --watch            Refresh on an interval
+  --interval <dur>   Watch refresh interval, e.g. 30s, 2m (default 1m)
+  max                Max PRs to fetch (default 100)
 `
 
-const searchQuery = `query($q:String!,$n:Int!){
-  search(query:$q,type:ISSUE,first:$n){
-    nodes{
-      ... on PullRequest{
-        number title url isDraft reviewDecision updatedAt mergeable
-        repository{ nameWithOwner }
-        comments{ totalCount }
-        latestOpinionatedReviews(first:20){ nodes{ state } }
-        commits(last:1){ nodes{ commit{ statusCheckRollup{ state } } } }
-      }
-    }
-  }
-}`
-
 type options struct {
-	org    string
-	repo   string
-	limit  int
-	asJSON bool
+	org      string
+	repo     string
+	limit    int
+	asJSON   bool
+	watch    bool
+	interval time.Duration
 }
 
 func parseArgs(args []string) (options, bool) {
-	o := options{limit: 100}
+	o := options{limit: 100, interval: time.Minute}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--org":
@@ -55,32 +42,39 @@ func parseArgs(args []string) (options, bool) {
 			if i++; i < len(args) {
 				o.repo = args[i]
 			}
+		case "--interval":
+			if i++; i < len(args) {
+				d, err := time.ParseDuration(args[i])
+				if err != nil || d < time.Second {
+					fmt.Fprintf(os.Stderr, "invalid interval: %s\n", args[i])
+					return o, false
+				}
+				o.interval = d
+			}
 		case "--json":
 			o.asJSON = true
+		case "--watch":
+			o.watch = true
 		case "-h", "--help":
 			return o, false
 		default:
-			if n, err := strconv.Atoi(args[i]); err == nil {
-				o.limit = n
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+				return o, false
 			}
+			if n <= 0 {
+				fmt.Fprintf(os.Stderr, "max must be positive: %s\n", args[i])
+				return o, false
+			}
+			o.limit = n
 		}
 	}
+	if o.watch && o.asJSON {
+		fmt.Fprintln(os.Stderr, "--watch and --json cannot be combined")
+		return o, false
+	}
 	return o, true
-}
-
-func fetchPRs(limit int) ([]ghPR, error) {
-	client, err := api.DefaultGraphQLClient()
-	if err != nil {
-		return nil, err
-	}
-	var resp struct {
-		Search struct{ Nodes []ghPR }
-	}
-	vars := map[string]any{"q": "author:@me is:pr is:open", "n": limit}
-	if err := client.Do(searchQuery, vars, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Search.Nodes, nil
 }
 
 func main() {
@@ -90,23 +84,13 @@ func main() {
 		return
 	}
 
-	prs, err := fetchPRs(opts.limit)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-	rows := buildRows(prs, opts.org, time.Now())
-	rows = filterRows(rows, opts.repo)
-
-	if opts.asJSON {
-		out, err := json.Marshal(rows)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
-		}
-		fmt.Println(string(out))
+	if opts.watch {
+		watchLoop(opts)
 		return
 	}
 
-	fmt.Print(renderTerminal(rows, 120))
+	if err := fetchAndRender(os.Stdout, opts); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 }
