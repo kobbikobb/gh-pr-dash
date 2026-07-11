@@ -72,7 +72,10 @@ func watchLoop(opts options) {
 		case <-sig:
 			return
 		case k := <-keys:
-			if k >= '1' && k <= '9' {
+			switch {
+			case k == 0x03 || k == 'q':
+				return
+			case k >= '1' && k <= '9':
 				idx := int(k-'0') - 1
 				filtered := filterRows(cachedRows, opts.repo)
 				if idx < len(filtered) {
