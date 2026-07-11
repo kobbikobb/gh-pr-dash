@@ -178,10 +178,11 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
+		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, title, url)
+		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
+			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
