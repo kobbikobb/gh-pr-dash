@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,6 +13,17 @@ func watchLoop(opts options) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
+
+	keys := make(chan byte, 1)
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			if _, err := os.Stdin.Read(buf); err != nil {
+				return
+			}
+			keys <- buf[0]
+		}
+	}()
 
 	fmt.Print("\033[?1049h\033[?25l")
 	defer fmt.Print("\033[?25h\033[?1049l")
@@ -51,6 +63,14 @@ func watchLoop(opts options) {
 		select {
 		case <-sig:
 			return
+		case k := <-keys:
+			if k >= '1' && k <= '9' {
+				idx := int(k-'0') - 1
+				filtered := filterRows(cachedRows, opts.repo)
+				if idx < len(filtered) {
+					openURL(filtered[idx].URL)
+				}
+			}
 		case r := <-results:
 			if r.err != nil {
 				errMsg = r.err.Error()
@@ -104,4 +124,9 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
+}
+
+func openURL(url string) {
+	cmd := exec.Command("open", url)
+	_ = cmd.Start()
 }
