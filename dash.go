@@ -102,6 +102,6 @@ func fetchAndRender(w io.Writer, opts options) error {
 	if opts.repo != "" && len(filtered) == 0 {
 		fmt.Fprintf(os.Stderr, "warning: --repo %q matched no PRs\n", opts.repo)
 	}
-	_, err = fmt.Fprint(w, header+renderTerminal(filtered, t.width, t.useColor, true))
+	_, err = fmt.Fprint(w, header+renderTerminal(filtered, t.width, t.useColor, true, 0))
 	return err
 }

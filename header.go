@@ -37,6 +37,14 @@ func banner(s string) []string {
 	return rows
 }
 
+// headerHeight returns the number of terminal lines the header will occupy.
+func headerHeight(height int) int {
+	if height < 16 {
+		return 2 // compact bar + trailing blank line
+	}
+	return 10 // top + empty + 5 art + status + bottom + blank
+}
+
 // renderHeader draws the wordmark inside a box. Under --watch the border and
 // each art row cycle colors for a wave; otherwise it renders in one steady color.
 // Padding is applied to plain runes so ANSI codes never skew the frame width.

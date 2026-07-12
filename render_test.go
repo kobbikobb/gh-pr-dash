@@ -45,7 +45,7 @@ func TestRenderTerminal(t *testing.T) {
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, true)
+		out := renderTerminal(rows, 100, false, true, 0)
 
 		if !strings.Contains(out, "Needs action") || !strings.Contains(out, "Ready to merge") {
 			t.Errorf("missing tier headings:\n%s", out)
@@ -53,7 +53,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show comment count when nonzero", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, true)
+		out := renderTerminal(rows, 100, false, true, 0)
 
 		if !strings.Contains(out, "(3)") {
 			t.Errorf("missing comment count:\n%s", out)
@@ -61,7 +61,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
-		out := renderTerminal(rows, 200, false, true)
+		out := renderTerminal(rows, 200, false, true, 0)
 
 		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
 			t.Errorf("missing PR url:\n%s", out)
@@ -69,7 +69,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, true)
+		out := renderTerminal(rows, 100, false, true, 0)
 
 		if strings.Contains(out, "\033") {
 			t.Errorf("found ANSI escape with color off:\n%q", out)
@@ -77,7 +77,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit ANSI escapes when color is on", func(t *testing.T) {
-		out := renderTerminal(rows, 100, true, true)
+		out := renderTerminal(rows, 100, true, true, 0)
 
 		if !strings.Contains(out, "\033[") {
 			t.Error("expected ANSI escapes with color on")
@@ -90,7 +90,7 @@ func TestRenderTerminal(t *testing.T) {
 			{Tier: tierMerged, CI: "none", Merge: "merged", Review: "none", URL: "https://x/2"},
 		}
 
-		out := renderTerminal(mixed, 120, false, true)
+		out := renderTerminal(mixed, 120, false, true, 0)
 
 		if !strings.Contains(out, "Recently merged") || !strings.Contains(out, "merged") {
 			t.Errorf("missing merged section:\n%s", out)
@@ -101,7 +101,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should report empty state", func(t *testing.T) {
-		if got := renderTerminal(nil, 100, false, true); !strings.Contains(got, "No open PRs") {
+		if got := renderTerminal(nil, 100, false, true, 0); !strings.Contains(got, "No open PRs") {
 			t.Errorf("got %q", got)
 		}
 	})

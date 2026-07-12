@@ -115,8 +115,8 @@ func reviewText(code string) string {
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
 // When showURL is false the URL column is omitted (used in watch mode where
-// digit keys replace it).
-func renderTerminal(rows []Row, width int, color bool, showURL bool) string {
+// digit keys start fetch/open url); maxRows limits output lines (0 = unlimited).
+func renderTerminal(rows []Row, width int, color bool, showURL bool, maxRows int) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
@@ -168,11 +168,20 @@ func renderTerminal(rows []Row, width int, color bool, showURL bool) string {
 
 	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
 	var b strings.Builder
+	lineCount := 0
 	tier := -1
 	for i, r := range rows {
+		if maxRows > 0 && lineCount >= maxRows {
+			left := len(rows) - i
+			if left > 0 {
+				b.WriteString(p.d + "  … and " + strconv.Itoa(left) + " more" + p.z + "\n")
+			}
+			break
+		}
 		if r.Tier != tier {
 			if tier != -1 {
 				b.WriteString("\n")
+				lineCount++
 			}
 			tier = r.Tier
 			name := "?"
@@ -184,6 +193,7 @@ func renderTerminal(rows []Row, width int, color bool, showURL bool) string {
 				color = headColor[tier]
 			}
 			b.WriteString(p.b + color + name + p.z + "\n")
+			lineCount++
 		}
 
 		num := "  "
@@ -204,6 +214,7 @@ func renderTerminal(rows []Row, width int, color bool, showURL bool) string {
 			fmt.Fprintf(&b, " %s %s %s %s %s %s %s\n",
 				num, ciGlyph(r.CI, p), merge, review, idle, repo, title)
 		}
+		lineCount++
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)

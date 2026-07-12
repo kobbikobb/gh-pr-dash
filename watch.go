@@ -42,7 +42,6 @@ func watchLoop(opts options) {
 	defer animTicker.Stop()
 
 	tick := 0
-	lastWidth := 0
 	var cachedRows []Row
 	var errMsg string
 	var lastFetch, nextRefresh time.Time
@@ -62,10 +61,6 @@ func watchLoop(opts options) {
 
 	for {
 		t := detectTerminal()
-		if t.width != lastWidth {
-			fmt.Print("\033[2J")
-			lastWidth = t.width
-		}
 		renderWatch(opts, tick, cachedRows, errMsg, refreshStatus(lastFetch, nextRefresh), t)
 
 		select {
@@ -116,7 +111,7 @@ func refreshStatus(lastFetch, nextRefresh time.Time) string {
 }
 
 func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t terminal) {
-	fmt.Print("\033[H")
+	fmt.Print("\033[H\033[J")
 	p := colors(t.useColor)
 	out := renderHeader(tick, true, t.useColor, t.width, t.height, status)
 	if errMsg != "" {
@@ -131,10 +126,13 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 		if opts.repo != "" && len(filtered) == 0 {
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
-		out += renderTerminal(filtered, t.width, t.useColor, false)
+		rem := t.height - headerHeight(t.height) - 4
+		if rem < 1 {
+			rem = 1
+		}
+		out += renderTerminal(filtered, t.width, t.useColor, false, rem)
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
-	fmt.Print("\033[J")
 }
 
 func openURL(url string) {
