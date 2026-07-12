@@ -54,45 +54,6 @@ func padLeft(s string, w int) string {
 	return s
 }
 
-func ciGlyph(code string, p palette) string {
-	switch code {
-	case "ok":
-		return p.g + "✓" + p.z
-	case "fail":
-		return p.r + "✗" + p.z
-	case "pending":
-		return p.y + "•" + p.z
-	default:
-		return p.d + "·" + p.z
-	}
-}
-
-func mergeColor(code string, p palette) string {
-	switch code {
-	case "conflict":
-		return p.r
-	case "unknown":
-		return p.y
-	case "merged":
-		return p.c
-	default:
-		return p.d
-	}
-}
-
-func reviewColor(code string, p palette) string {
-	switch code {
-	case "approved":
-		return p.g
-	case "changes":
-		return p.r
-	case "review":
-		return p.y
-	default:
-		return p.d
-	}
-}
-
 func idleColor(days int, p palette) string {
 	switch {
 	case days >= 14:
@@ -104,11 +65,26 @@ func idleColor(days int, p palette) string {
 	}
 }
 
-func reviewText(code string) string {
-	if code == "none" {
-		return "·"
+// statusEmoji combines conflict, CI, and changes-requested into one glyph.
+func statusEmoji(r Row, p palette) string {
+	var left, ci, right string
+	if r.Merge == "conflict" {
+		left = "💥"
 	}
-	return code
+	switch r.CI {
+	case "ok":
+		ci = p.g + "✅" + p.z
+	case "fail":
+		ci = p.r + "❌" + p.z
+	case "pending":
+		ci = p.y + "⏳" + p.z
+	default:
+		ci = p.d + "·" + p.z
+	}
+	if r.Review == "changes" {
+		right = "💬"
+	}
+	return left + ci + right
 }
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
@@ -130,7 +106,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	const prefixW = 2 + 2 + 1 + 4 + 1 // indent + emoji(2) + space + idle(4) + space
 	longest, urlW := 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -175,13 +151,12 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		}
 
 		title := padRight(truncate(titles[i], titleW), titleW)
-		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
-		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
+		emoji := statusEmoji(r, p)
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, title, url)
+		fmt.Fprintf(&b, "  %s %s %s  %s\n",
+			emoji, idle, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
