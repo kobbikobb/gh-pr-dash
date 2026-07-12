@@ -131,7 +131,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const fixedW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	const fixedW = 2 + 1 + 2 + 8 + 2 + 8 + 2 + 4 + 2 // indent + ci + merge(8) + review(8) + idle(4) + double-spaces
 	longest, urlW, repoW := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -150,8 +150,8 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			repoW = n
 		}
 	}
-	prefixW := fixedW + repoW + 1 // repo column + spaces
-	titleW := width - prefixW - 2 - urlW
+	prefixW := fixedW + repoW + 2 // repo column + double-spaces
+	titleW := width - prefixW - 3 - urlW
 	if titleW > longest {
 		titleW = longest
 	}
@@ -186,7 +186,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		repo := p.u + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.m + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s %s  %s\n",
+		fmt.Fprintf(&b, "  %s  %s  %s  %s  %s  %s   %s\n",
 			ciGlyph(r.CI, p), merge, review, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
