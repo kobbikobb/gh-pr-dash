@@ -80,19 +80,6 @@ func mergeColor(code string, p palette) string {
 	}
 }
 
-func reviewColor(code string, p palette) string {
-	switch code {
-	case "approved":
-		return p.g
-	case "changes":
-		return p.r
-	case "review":
-		return p.y
-	default:
-		return p.d
-	}
-}
-
 func idleColor(days int, p palette) string {
 	switch {
 	case days >= 14:
@@ -102,13 +89,6 @@ func idleColor(days int, p palette) string {
 	default:
 		return p.d
 	}
-}
-
-func reviewText(code string) string {
-	if code == "none" {
-		return "·"
-	}
-	return code
 }
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
@@ -130,7 +110,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 1 + 8 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + review(8) + idle(4) + spaces
+	const prefixW = 2 + 1 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + idle(4) + spaces
 	longest, urlW := 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -176,12 +156,11 @@ func renderTerminal(rows []Row, width int, color bool) string {
 
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
-		review := reviewColor(r.Review, p) + padRight(reviewText(r.Review), 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, review, idle, title, url)
+		fmt.Fprintf(&b, "  %s %s %s %s  %s\n",
+			ciGlyph(r.CI, p), merge, idle, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
