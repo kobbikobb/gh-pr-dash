@@ -110,8 +110,8 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 1 + 8 + 1 + 4 + 1 // indent + ci + merge(8) + idle(4) + spaces
-	longest, urlW := 0, 0
+	const prefixW = 2 + 1 + 2 + 8 + 2 + 4 + 2 // indent + ci + merge(8) + idle(4) + double-spaces
+	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
 		t := r.Title
@@ -125,8 +125,12 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		if n := len([]rune(r.URL)); n > urlW {
 			urlW = n
 		}
+		if n := len([]rune(r.Repository)); n > longestRepo {
+			longestRepo = n
+		}
 	}
-	titleW := width - prefixW - 2 - urlW
+	repoW := longestRepo
+	titleW := width - prefixW - 2 - 3 - urlW - repoW
 	if titleW > longest {
 		titleW = longest
 	}
@@ -157,10 +161,11 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
+		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s %s %s %s  %s\n",
-			ciGlyph(r.CI, p), merge, idle, title, url)
+		fmt.Fprintf(&b, "  %s  %s  %s  %s  %s   %s\n",
+			ciGlyph(r.CI, p), merge, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
