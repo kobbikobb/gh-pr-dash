@@ -93,7 +93,7 @@ func idleColor(days int, p palette) string {
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
 // plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int, color bool) string {
+func renderTerminal(rows []Row, width int, color bool, showURLs bool) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
@@ -122,8 +122,10 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		if n := len([]rune(t)); n > longest {
 			longest = n
 		}
-		if n := len([]rune(r.URL)); n > urlW {
-			urlW = n
+		if showURLs {
+			if n := len([]rune(r.URL)); n > urlW {
+				urlW = n
+			}
 		}
 		if n := len([]rune(r.Repository)); n > longestRepo {
 			longestRepo = n
@@ -162,10 +164,15 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
-		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s  %s  %s  %s  %s   %s\n",
-			ciGlyph(r.CI, p), merge, idle, repo, title, url)
+		if showURLs {
+			url := p.d + r.URL + p.z
+			fmt.Fprintf(&b, "  %s  %s  %s  %s  %s   %s\n",
+				ciGlyph(r.CI, p), merge, idle, repo, title, url)
+		} else {
+			fmt.Fprintf(&b, "  %s  %s  %s  %s  %s\n",
+				ciGlyph(r.CI, p), merge, idle, repo, title)
+		}
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
