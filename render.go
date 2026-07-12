@@ -65,26 +65,29 @@ func idleColor(days int, p palette) string {
 	}
 }
 
-// statusEmoji combines conflict, CI, and changes-requested into one glyph.
-func statusEmoji(r Row, p palette) string {
-	var left, ci, right string
-	if r.Merge == "conflict" {
-		left = "💥"
-	}
+// statusGlyph returns a 2-char status: CI symbol + conflict/changes suffix.
+func statusGlyph(r Row, p palette) string {
+	var ci string
 	switch r.CI {
 	case "ok":
-		ci = p.g + "✅" + p.z
+		ci = p.g + "✓" + p.z
 	case "fail":
-		ci = p.r + "❌" + p.z
+		ci = p.r + "✗" + p.z
 	case "pending":
-		ci = p.y + "⏳" + p.z
+		ci = p.y + "•" + p.z
 	default:
 		ci = p.d + "·" + p.z
 	}
-	if r.Review == "changes" {
-		right = "💬"
+	switch {
+	case r.Merge == "conflict" && r.Review == "changes":
+		return ci + p.r + "!" + p.z
+	case r.Merge == "conflict":
+		return ci + p.r + "~" + p.z
+	case r.Review == "changes":
+		return ci + p.r + "!" + p.z
+	default:
+		return ci + " "
 	}
-	return left + ci + right
 }
 
 // renderTerminal produces the aligned, grouped table. Padding is applied to the
@@ -106,7 +109,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 2 + 1 + 4 + 1 // indent + emoji(2) + space + idle(4) + space
+	const prefixW = 2 + 2 + 1 + 4 + 1 // indent + status(2) + space + idle(4) + space
 	longest, urlW := 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -151,12 +154,12 @@ func renderTerminal(rows []Row, width int, color bool) string {
 		}
 
 		title := padRight(truncate(titles[i], titleW), titleW)
-		emoji := statusEmoji(r, p)
+		status := statusGlyph(r, p)
 		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
 		url := p.d + r.URL + p.z
 
 		fmt.Fprintf(&b, "  %s %s %s  %s\n",
-			emoji, idle, title, url)
+			status, idle, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
