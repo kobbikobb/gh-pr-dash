@@ -19,7 +19,7 @@ make uninstall  # gh extension remove pr-dash
 go test -run TestName ./...   # single test
 ```
 
-Default branch for PRs is `rewrite-in-go` (not `main`).
+Default branch is `main`.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ Flat `package main`, one concern per file. Pipeline: **fetch → classify/rank �
 
 - `main.go` — arg parsing (`parseArgs`), dispatch to watch loop or one-shot `fetchAndRender`.
 - `dash.go` — GitHub GraphQL query + `fetchPRs`; `detectTerminal` (width + `NO_COLOR`/TTY color detection); `fetchAndRender` orchestrates fetch→build→render for both JSON and terminal output.
-- `pr.go` — the core logic. `ghPR` (raw GraphQL shape) → `Row` (ranked, render-ready). `buildRows` filters by org and sorts. **Ranking = 4 tiers** (`tierNeedsAction` < `tierReady` < `tierWaiting` < `tierDrafts`), most-idle-first within each tier.
+- `pr.go` — the core logic. `ghPR` (raw GraphQL shape) → `Row` (ranked, render-ready). `buildRows` filters by org and sorts. **Ranking = 6 tiers** (`tierNeedsAction` < `tierReady` < `tierBuilding` < `tierWaiting` < `tierDrafts` < `tierMerged`), most-idle-first within each tier.
 - `render.go` — terminal table rendering. Status stored as stable codes (ci: ok/fail/pending/none, merge: clean/conflict/unknown, review: approved/changes/review/none), styled here.
 - `header.go` — ASCII-art box header, static and animated (watch) variants.
 - `watch.go` — `--watch` loop: 1-min data ticker + 200ms animation ticker, cursor-home redraw.
