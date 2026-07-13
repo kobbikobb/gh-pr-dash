@@ -48,9 +48,6 @@ func renderHeader(tick int, watch bool, color bool, width, height int, status st
 	}
 
 	p := colors(color)
-	if width < 40 {
-		width = 40
-	}
 	w := width
 
 	border := borderColor(tick, watch, p)
