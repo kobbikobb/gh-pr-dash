@@ -45,4 +45,30 @@ func TestParseArgs(t *testing.T) {
 			t.Error("expected rejection")
 		}
 	})
+
+	t.Run("should parse --org", func(t *testing.T) {
+		o, ok := parseArgs([]string{"--org", "my-org"})
+
+		if !ok || o.org != "my-org" {
+			t.Errorf("ok=%v org=%q", ok, o.org)
+		}
+	})
+
+	t.Run("should parse --repo", func(t *testing.T) {
+		o, ok := parseArgs([]string{"--repo", "owner/repo"})
+
+		if !ok || o.repo != "owner/repo" {
+			t.Errorf("ok=%v repo=%q", ok, o.repo)
+		}
+	})
+
+	t.Run("should reject on --help", func(t *testing.T) {
+		for _, flag := range []string{"-h", "--help"} {
+			_, ok := parseArgs([]string{flag})
+
+			if ok {
+				t.Errorf("expected rejection for %s", flag)
+			}
+		}
+	})
 }
