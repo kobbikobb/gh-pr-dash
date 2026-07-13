@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, rewrite-in-go]
+    branches: [main]
   pull_request:
 
 jobs:
