@@ -54,6 +54,29 @@ func padLeft(s string, w int) string {
 	return s
 }
 
+// gutter is the horizontal margin on each side; dropped on narrow terminals so
+// the compact layout keeps its full width.
+func gutter(width int) int {
+	if width < 40 {
+		return 0
+	}
+	return 2
+}
+
+func indent(s string, n int) string {
+	if n == 0 {
+		return s
+	}
+	pad := strings.Repeat(" ", n)
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if ln != "" {
+			lines[i] = pad + ln
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func ciGlyph(code string, p palette) string {
 	switch code {
 	case "ok":

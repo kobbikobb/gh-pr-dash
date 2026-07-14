@@ -88,7 +88,9 @@ func refreshStatus(lastFetch, nextRefresh time.Time) string {
 func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t terminal) {
 	fmt.Print("\033[H")
 	p := colors(t.useColor)
-	out := renderHeader(tick, true, t.useColor, t.width, t.height, status)
+	m := gutter(t.width)
+	inner := t.width - 2*m
+	out := renderHeader(tick, true, t.useColor, inner, t.height, status)
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}
@@ -101,9 +103,9 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 		if opts.repo != "" && len(filtered) == 0 {
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
-		out += renderTerminal(filtered, t.width, t.useColor)
+		out += renderTerminal(filtered, inner, t.useColor)
 	}
-	out = strings.ReplaceAll(out, "\n", "\033[K\n")
+	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\n")
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
 }
