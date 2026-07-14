@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -102,6 +103,7 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 		}
 		out += renderTerminal(filtered, t.width, t.useColor)
 	}
+	out = strings.ReplaceAll(out, "\n", "\033[K\n")
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
 }
