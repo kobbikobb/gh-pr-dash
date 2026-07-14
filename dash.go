@@ -25,8 +25,8 @@ const searchQuery = `query($q:String!,$n:Int!){
   }
 }`
 
-// Keep the "last 24h" heading in render.go in sync with this window.
-const mergedWindow = 24 * time.Hour
+// Keep the "last 10" heading in render.go in sync with this cap.
+const mergedLimit = 10
 
 type terminal struct {
 	width    int
@@ -73,9 +73,8 @@ func fetchRows(opts options, now time.Time) ([]Row, error) {
 
 	// The open list is the primary job; a failure on the secondary merged
 	// search just drops that section rather than blanking everything.
-	since := now.Add(-mergedWindow).UTC().Format("2006-01-02T15:04:05Z")
-	mergedQ := fmt.Sprintf("author:@me is:pr is:merged merged:>=%s sort:updated-desc", since)
-	if merged, err := fetchPRs(mergedQ, opts.limit); err == nil {
+	mergedQ := "author:@me is:pr is:merged sort:updated-desc"
+	if merged, err := fetchPRs(mergedQ, mergedLimit); err == nil {
 		rows = append(rows, buildMergedRows(merged, opts.org, now)...)
 	}
 	return rows, nil
