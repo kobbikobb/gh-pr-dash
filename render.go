@@ -12,7 +12,7 @@ var tierNames = []string{
 	"Waiting on CI",
 	"Waiting on review",
 	"Drafts",
-	"Recently merged — last 24h",
+	"Recently merged — last 10",
 }
 
 type palette struct{ b, d, r, g, y, c, z string }
