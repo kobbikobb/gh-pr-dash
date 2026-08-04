@@ -217,14 +217,14 @@ func TestBuildMergedRows(t *testing.T) {
 		}
 	})
 
-	t.Run("should keep search order (newest first)", func(t *testing.T) {
-		newer := prWith(func(p *ghPR) { p.Number = 1 })
-		older := prWith(func(p *ghPR) { p.Number = 2 })
+	t.Run("should sort newest merge first", func(t *testing.T) {
+		newer := prWith(func(p *ghPR) { p.Number = 1; p.MergedAt = now.Add(-1 * time.Hour) })
+		older := prWith(func(p *ghPR) { p.Number = 2; p.MergedAt = now.Add(-3 * time.Hour) })
 
-		rows := buildMergedRows([]ghPR{newer, older}, "", now)
+		rows := buildMergedRows([]ghPR{older, newer}, "", now)
 
 		if rows[0].Ref != "repo#1" || rows[1].Ref != "repo#2" {
-			t.Errorf("order changed: %q, %q", rows[0].Ref, rows[1].Ref)
+			t.Errorf("order wrong: %q, %q", rows[0].Ref, rows[1].Ref)
 		}
 	})
 

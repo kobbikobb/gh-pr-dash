@@ -13,6 +13,7 @@ import (
 
 const searchQuery = `query($q:String!,$n:Int!){
   search(query:$q,type:ISSUE,first:$n){
+    issueCount
     nodes{
       ... on PullRequest{
         number title url isDraft reviewDecision updatedAt mergedAt mergeable mergeStateStatus
@@ -25,7 +26,8 @@ const searchQuery = `query($q:String!,$n:Int!){
   }
 }`
 
-// Keep the "last 10" heading in render.go in sync with this cap.
+// Cap on merged-today rows listed. The heading shows the real total from
+// issueCount even when more than this many merged today.
 const mergedLimit = 10
 
 type terminal struct {
@@ -47,41 +49,50 @@ func detectTerminal() terminal {
 	return terminal{width: width, height: height, useColor: useColor}
 }
 
-func fetchPRs(query string, limit int) ([]ghPR, error) {
+func fetchPRs(query string, limit int) ([]ghPR, int, error) {
 	client, err := api.DefaultGraphQLClient()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var resp struct {
-		Search struct{ Nodes []ghPR }
+		Search struct {
+			IssueCount int
+			Nodes      []ghPR
+		}
 	}
 	vars := map[string]any{"q": query, "n": limit}
 	if err := client.Do(searchQuery, vars, &resp); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return resp.Search.Nodes, nil
+	return resp.Search.Nodes, resp.Search.IssueCount, nil
 }
 
-// fetchRows returns the ranked open PRs followed by PRs merged within the
-// window; tierMerged sorts last, so appending keeps the sections in order.
-func fetchRows(opts options, now time.Time) ([]Row, error) {
-	open, err := fetchPRs("author:@me is:pr is:open", opts.limit)
+// fetchRows returns the ranked open PRs followed by PRs merged today, plus the
+// total number of PRs merged today (issueCount, pre-cap) so the heading can
+// state the real count even when only mergedLimit rows are listed.
+func fetchRows(opts options, now time.Time) ([]Row, int, error) {
+	open, _, err := fetchPRs("author:@me is:pr is:open", opts.limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	rows := buildRows(open, opts.org, now)
 
 	// The open list is the primary job; a failure on the secondary merged
 	// search just drops that section rather than blanking everything.
-	mergedQ := "author:@me is:pr is:merged sort:updated-desc"
-	if merged, err := fetchPRs(mergedQ, mergedLimit); err == nil {
+	mergedQ := "author:@me is:pr merged:>=" + now.Format("2006-01-02")
+	if opts.org != "" {
+		mergedQ += " org:" + opts.org
+	}
+	mergedToday := 0
+	if merged, total, err := fetchPRs(mergedQ, mergedLimit); err == nil {
+		mergedToday = total
 		rows = append(rows, buildMergedRows(merged, opts.org, now)...)
 	}
-	return rows, nil
+	return rows, mergedToday, nil
 }
 
 func fetchAndRender(w io.Writer, opts options) error {
-	rows, err := fetchRows(opts, time.Now())
+	rows, mergedTotal, err := fetchRows(opts, time.Now())
 	if err != nil {
 		return err
 	}
@@ -103,6 +114,6 @@ func fetchAndRender(w io.Writer, opts options) error {
 	if opts.repo != "" && len(filtered) == 0 {
 		fmt.Fprintf(os.Stderr, "warning: --repo %q matched no PRs\n", opts.repo)
 	}
-	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor), m))
+	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor, mergedTotal), m))
 	return err
 }

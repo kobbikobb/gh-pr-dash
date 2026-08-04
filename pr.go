@@ -40,16 +40,17 @@ type ghPR struct {
 //	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
 type Row struct {
-	Tier       int    `json:"tier"`
-	IdleDays   int    `json:"idle_days"`
-	CI         string `json:"ci"`
-	Merge      string `json:"merge"`
-	Review     string `json:"review"`
-	Ref        string `json:"pr"`
-	Repository string `json:"repo"`
-	URL        string `json:"url"`
-	Comments   int    `json:"comments"`
-	Title      string `json:"title"`
+	Tier       int        `json:"tier"`
+	IdleDays   int        `json:"idle_days"`
+	CI         string     `json:"ci"`
+	Merge      string     `json:"merge"`
+	Review     string     `json:"review"`
+	Ref        string     `json:"pr"`
+	Repository string     `json:"repo"`
+	URL        string     `json:"url"`
+	Comments   int        `json:"comments"`
+	Title      string     `json:"title"`
+	MergedAt   *time.Time `json:"merged_at,omitempty"`
 }
 
 // Tier values, lowest sorts first.
@@ -198,8 +199,9 @@ func filterRows(rows []Row, repo string) []Row {
 }
 
 // classifyMerged builds a row for an already-merged PR; CI/review status is
-// no longer actionable, so only the merge marker and merge age are shown.
+// no longer actionable, so only the merge marker and merge time are shown.
 func classifyMerged(pr ghPR, now time.Time) Row {
+	t := pr.MergedAt
 	return Row{
 		Tier:       tierMerged,
 		IdleDays:   int(now.Sub(pr.MergedAt).Hours() / 24),
@@ -211,10 +213,12 @@ func classifyMerged(pr ghPR, now time.Time) Row {
 		URL:        pr.URL,
 		Comments:   pr.Comments.TotalCount,
 		Title:      pr.Title,
+		MergedAt:   &t,
 	}
 }
 
-// buildMergedRows preserves the search order (most recently updated first).
+// buildMergedRows filters by owner and sorts newest-merge-first; most recently
+// merged PRs are the ones worth looking at.
 func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
 	rows := make([]Row, 0, len(prs))
 	for _, pr := range prs {
@@ -226,6 +230,9 @@ func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
 		}
 		rows = append(rows, classifyMerged(pr, now))
 	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].MergedAt.After(*rows[j].MergedAt)
+	})
 	return rows
 }
 
