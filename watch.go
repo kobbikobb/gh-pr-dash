@@ -25,6 +25,7 @@ func watchLoop(opts options) {
 	tick := 0
 	lastWidth := 0
 	var cachedRows []Row
+	var cachedMergedTotal int
 	var errMsg string
 	var lastFetch, nextRefresh time.Time
 
@@ -34,8 +35,8 @@ func watchLoop(opts options) {
 	startFetch := func() {
 		nextRefresh = time.Now().Add(opts.interval)
 		go func() {
-			rows, err := fetchRows(opts, time.Now())
-			results <- fetchResult{rows, err}
+			rows, mergedTotal, err := fetchRows(opts, time.Now())
+			results <- fetchResult{rows, mergedTotal, err}
 		}()
 	}
 
@@ -47,7 +48,7 @@ func watchLoop(opts options) {
 			fmt.Print("\033[2J")
 			lastWidth = t.width
 		}
-		renderWatch(opts, tick, cachedRows, errMsg, refreshStatus(lastFetch, nextRefresh), t)
+		renderWatch(opts, tick, cachedRows, cachedMergedTotal, errMsg, refreshStatus(lastFetch, nextRefresh), t)
 
 		select {
 		case <-sig:
@@ -57,6 +58,7 @@ func watchLoop(opts options) {
 				errMsg = r.err.Error()
 			} else {
 				cachedRows = r.rows
+				cachedMergedTotal = r.mergedTotal
 				lastFetch = time.Now()
 				errMsg = ""
 			}
@@ -70,8 +72,9 @@ func watchLoop(opts options) {
 }
 
 type fetchResult struct {
-	rows []Row
-	err  error
+	rows        []Row
+	mergedTotal int
+	err         error
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {
@@ -85,7 +88,7 @@ func refreshStatus(lastFetch, nextRefresh time.Time) string {
 	return fmt.Sprintf("refreshed %s · next %ds", lastFetch.Format("15:04"), secs)
 }
 
-func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t terminal) {
+func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, status string, t terminal) {
 	fmt.Print("\033[H")
 	p := colors(t.useColor)
 	m := gutter(t.width)
@@ -103,7 +106,11 @@ func renderWatch(opts options, tick int, rows []Row, errMsg, status string, t te
 		if opts.repo != "" && len(filtered) == 0 {
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
-		out += renderTerminal(filtered, inner, t.useColor)
+		total := mergedTotal
+		if opts.repo != "" {
+			total = 0
+		}
+		out += renderTerminal(filtered, inner, t.useColor, total)
 	}
 	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\n")
 	_, _ = fmt.Fprint(os.Stdout, out)

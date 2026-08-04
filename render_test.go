@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTruncate(t *testing.T) {
@@ -45,7 +46,7 @@ func TestRenderTerminal(t *testing.T) {
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
+		out := renderTerminal(rows, 100, false, 0)
 
 		if !strings.Contains(out, "Needs action") || !strings.Contains(out, "Ready to merge") {
 			t.Errorf("missing tier headings:\n%s", out)
@@ -53,7 +54,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show comment count when nonzero", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
+		out := renderTerminal(rows, 100, false, 0)
 
 		if !strings.Contains(out, "(3)") {
 			t.Errorf("missing comment count:\n%s", out)
@@ -61,7 +62,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
-		out := renderTerminal(rows, 200, false)
+		out := renderTerminal(rows, 200, false, 0)
 
 		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
 			t.Errorf("missing PR url:\n%s", out)
@@ -69,7 +70,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false)
+		out := renderTerminal(rows, 100, false, 0)
 
 		if strings.Contains(out, "\033") {
 			t.Errorf("found ANSI escape with color off:\n%q", out)
@@ -77,7 +78,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit ANSI escapes when color is on", func(t *testing.T) {
-		out := renderTerminal(rows, 100, true)
+		out := renderTerminal(rows, 100, true, 0)
 
 		if !strings.Contains(out, "\033[") {
 			t.Error("expected ANSI escapes with color on")
@@ -90,9 +91,9 @@ func TestRenderTerminal(t *testing.T) {
 			{Tier: tierMerged, CI: "none", Merge: "merged", Review: "none", URL: "https://x/2"},
 		}
 
-		out := renderTerminal(mixed, 120, false)
+		out := renderTerminal(mixed, 120, false, 0)
 
-		if !strings.Contains(out, "Recently merged") || !strings.Contains(out, "merged") {
+		if !strings.Contains(out, "Merged today") || !strings.Contains(out, "merged") {
 			t.Errorf("missing merged section:\n%s", out)
 		}
 		if !strings.Contains(out, "1 open") || !strings.Contains(out, "1 merged") {
@@ -100,8 +101,35 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should show merge time instead of idle days for merged rows", func(t *testing.T) {
+		mergedAt := time.Date(2026, 8, 4, 14, 32, 0, 0, time.UTC)
+		mixed := []Row{
+			{Tier: tierReady, CI: "ok", Merge: "clean", Review: "approved", URL: "https://x/1"},
+			{Tier: tierMerged, Merge: "merged", MergedAt: &mergedAt, URL: "https://x/2"},
+		}
+
+		out := renderTerminal(mixed, 120, false, 0)
+
+		want := mergedAt.Local().Format("15:04")
+		if !strings.Contains(out, want) {
+			t.Errorf("missing merge time %q:\n%s", want, out)
+		}
+	})
+
+	t.Run("should state the real merged-today total in the heading when capped", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierMerged, Merge: "merged", URL: "https://x/2"},
+		}
+
+		out := renderTerminal(mixed, 120, false, 12)
+
+		if !strings.Contains(out, "Merged today (12)") {
+			t.Errorf("heading should show total 12:\n%s", out)
+		}
+	})
+
 	t.Run("should report empty state", func(t *testing.T) {
-		if got := renderTerminal(nil, 100, false); !strings.Contains(got, "No open PRs") {
+		if got := renderTerminal(nil, 100, false, 0); !strings.Contains(got, "No open PRs") {
 			t.Errorf("got %q", got)
 		}
 	})

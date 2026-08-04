@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -201,6 +202,29 @@ func TestClassify(t *testing.T) {
 	})
 }
 
+func TestMergedQuery(t *testing.T) {
+	t.Run("should anchor to local midnight with its UTC offset", func(t *testing.T) {
+		loc := time.FixedZone("test", 2*3600)
+		now := time.Date(2026, 8, 4, 18, 30, 0, 0, loc)
+
+		got := mergedQuery(now, "")
+
+		if got != "author:@me is:pr merged:>=2026-08-04T00:00:00+02:00" {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("should append the org qualifier when set", func(t *testing.T) {
+		now := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
+
+		got := mergedQuery(now, "acme")
+
+		if !strings.HasSuffix(got, " org:acme") {
+			t.Errorf("got %q", got)
+		}
+	})
+}
+
 func TestBuildMergedRows(t *testing.T) {
 	now := time.Now()
 
@@ -217,14 +241,14 @@ func TestBuildMergedRows(t *testing.T) {
 		}
 	})
 
-	t.Run("should keep search order (newest first)", func(t *testing.T) {
-		newer := prWith(func(p *ghPR) { p.Number = 1 })
-		older := prWith(func(p *ghPR) { p.Number = 2 })
+	t.Run("should sort newest merge first", func(t *testing.T) {
+		newer := prWith(func(p *ghPR) { p.Number = 1; p.MergedAt = now.Add(-1 * time.Hour) })
+		older := prWith(func(p *ghPR) { p.Number = 2; p.MergedAt = now.Add(-3 * time.Hour) })
 
-		rows := buildMergedRows([]ghPR{newer, older}, "", now)
+		rows := buildMergedRows([]ghPR{older, newer}, "", now)
 
 		if rows[0].Ref != "repo#1" || rows[1].Ref != "repo#2" {
-			t.Errorf("order changed: %q, %q", rows[0].Ref, rows[1].Ref)
+			t.Errorf("order wrong: %q, %q", rows[0].Ref, rows[1].Ref)
 		}
 	})
 

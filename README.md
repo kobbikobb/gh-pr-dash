@@ -26,7 +26,7 @@ Ready to merge (1)
   ✓ clean    clean        2d api   Validate regulator config on save (1)       https://github.com/me/api/pull/12385
 ```
 
-Each row: **CI** (`✓` pass `✗` fail `•` pending), **merge** state, **repo**, **idle** days, title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Each row: **CI** (`✓` pass `✗` fail `•` pending), **merge** state, **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
 
 ## Install
 
@@ -56,7 +56,7 @@ Six tiers, most-stale-first within each:
 | **Waiting on CI** | approved but CI still running |
 | **Waiting on review** | everything else that's open |
 | **Drafts** | draft PRs |
-| **Recently merged** | merged in the last 24 h |
+| **Merged today** | merged since midnight (up to 10 listed, count shows the real total) |
 
 Review status honors a standing approval or changes-request as well as `reviewDecision`, which is empty in repos that don't *require* review.
 

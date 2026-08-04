@@ -12,8 +12,11 @@ var tierNames = []string{
 	"Waiting on CI",
 	"Waiting on review",
 	"Drafts",
-	"Recently merged — last 10",
+	"Merged today",
 }
+
+// idleW fits "14:32" for merged rows and "14d" for open rows.
+const idleW = 5
 
 type palette struct{ b, d, r, g, y, c, z string }
 
@@ -114,9 +117,21 @@ func idleColor(days int, p palette) string {
 	}
 }
 
-// renderTerminal produces the aligned, grouped table. Padding is applied to the
-// plain text before color so ANSI escapes never throw off column widths.
-func renderTerminal(rows []Row, width int, color bool) string {
+// idleField shows idle days for open PRs, but merged PRs are always 0d, so
+// their column shows the merge time instead (local time).
+func idleField(r Row, p palette) string {
+	if r.MergedAt != nil {
+		return p.d + padLeft(r.MergedAt.Local().Format("15:04"), idleW) + p.z
+	}
+	return idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", idleW) + p.z
+}
+
+// renderTerminal produces the aligned, grouped table. mergedTotal is the real
+// count of PRs merged today (from the search issueCount), so the merged
+// heading can state the total even when only mergedLimit rows are listed.
+// Padding is applied to the plain text before color so ANSI escapes never
+// throw off column widths.
+func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
@@ -128,12 +143,18 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			counts[r.Tier]++
 		}
 	}
+	// mergedShown is what the merged heading and footer agree on: the listed
+	// rows, or the real merged-today total when more than mergedLimit are shown.
+	mergedShown := counts[tierMerged]
+	if mergedTotal > mergedShown {
+		mergedShown = mergedTotal
+	}
 
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 2 + 8 + 2 + 4 + 2 // indent + ci + merge(8) + idle(4) + double-spaces
+	const prefixW = 2 + 1 + 2 + 8 + 2 + idleW + 2 // indent + ci + merge(8) + idle(idleW) + double-spaces
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -172,7 +193,11 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			tier = r.Tier
 			name := "?"
 			if tier >= 0 && tier < len(tierNames) {
-				name = fmt.Sprintf("%s (%d)", tierNames[tier], counts[tier])
+				count := counts[tier]
+				if tier == tierMerged {
+					count = mergedShown
+				}
+				name = fmt.Sprintf("%s (%d)", tierNames[tier], count)
 			}
 			color := p.d
 			if tier >= 0 && tier < len(headColor) {
@@ -183,7 +208,7 @@ func renderTerminal(rows []Row, width int, color bool) string {
 
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
-		idle := idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", 4) + p.z
+		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
@@ -191,6 +216,6 @@ func renderTerminal(rows []Row, width int, color bool) string {
 			ciGlyph(r.CI, p), merge, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
-		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], mergedShown, p.z)
 	return b.String()
 }
