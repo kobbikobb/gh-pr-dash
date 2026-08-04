@@ -143,6 +143,12 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			counts[r.Tier]++
 		}
 	}
+	// mergedShown is what the merged heading and footer agree on: the listed
+	// rows, or the real merged-today total when more than mergedLimit are shown.
+	mergedShown := counts[tierMerged]
+	if mergedTotal > mergedShown {
+		mergedShown = mergedTotal
+	}
 
 	// Title column is as wide as the longest title, but no wider than the space
 	// left once the fixed columns and the URL are accounted for — so the URL sits
@@ -188,8 +194,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			name := "?"
 			if tier >= 0 && tier < len(tierNames) {
 				count := counts[tier]
-				if tier == tierMerged && mergedTotal > count {
-					count = mergedTotal
+				if tier == tierMerged {
+					count = mergedShown
 				}
 				name = fmt.Sprintf("%s (%d)", tierNames[tier], count)
 			}
@@ -210,6 +216,6 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			ciGlyph(r.CI, p), merge, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
-		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierMerged], p.z)
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], mergedShown, p.z)
 	return b.String()
 }

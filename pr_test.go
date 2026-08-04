@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -197,6 +198,29 @@ func TestClassify(t *testing.T) {
 		}
 		if row.Ref != "repo#42" {
 			t.Errorf("ref = %q, want repo#42", row.Ref)
+		}
+	})
+}
+
+func TestMergedQuery(t *testing.T) {
+	t.Run("should anchor to local midnight with its UTC offset", func(t *testing.T) {
+		loc := time.FixedZone("test", 2*3600)
+		now := time.Date(2026, 8, 4, 18, 30, 0, 0, loc)
+
+		got := mergedQuery(now, "")
+
+		if got != "author:@me is:pr merged:>=2026-08-04T00:00:00+02:00" {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("should append the org qualifier when set", func(t *testing.T) {
+		now := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
+
+		got := mergedQuery(now, "acme")
+
+		if !strings.HasSuffix(got, " org:acme") {
+			t.Errorf("got %q", got)
 		}
 	})
 }

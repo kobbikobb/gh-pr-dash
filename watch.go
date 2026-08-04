@@ -106,7 +106,11 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		if opts.repo != "" && len(filtered) == 0 {
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
-		out += renderTerminal(filtered, inner, t.useColor, mergedTotal)
+		total := mergedTotal
+		if opts.repo != "" {
+			total = 0
+		}
+		out += renderTerminal(filtered, inner, t.useColor, total)
 	}
 	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\n")
 	_, _ = fmt.Fprint(os.Stdout, out)

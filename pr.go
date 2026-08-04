@@ -231,6 +231,9 @@ func buildMergedRows(prs []ghPR, org string, now time.Time) []Row {
 		rows = append(rows, classifyMerged(pr, now))
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].MergedAt == nil || rows[j].MergedAt == nil {
+			return false
+		}
 		return rows[i].MergedAt.After(*rows[j].MergedAt)
 	})
 	return rows

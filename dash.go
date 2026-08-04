@@ -67,6 +67,18 @@ func fetchPRs(query string, limit int) ([]ghPR, int, error) {
 	return resp.Search.Nodes, resp.Search.IssueCount, nil
 }
 
+// mergedQuery scopes PRs merged since local midnight. GitHub evaluates search
+// date qualifiers at UTC, so a bare date would shift the boundary by the local
+// UTC offset; pass the local-midnight instant with its own offset instead.
+func mergedQuery(now time.Time, org string) string {
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	q := "author:@me is:pr merged:>=" + midnight.Format("2006-01-02T15:04:05Z07:00")
+	if org != "" {
+		q += " org:" + org
+	}
+	return q
+}
+
 // fetchRows returns the ranked open PRs followed by PRs merged today, plus the
 // total number of PRs merged today (issueCount, pre-cap) so the heading can
 // state the real count even when only mergedLimit rows are listed.
@@ -79,12 +91,8 @@ func fetchRows(opts options, now time.Time) ([]Row, int, error) {
 
 	// The open list is the primary job; a failure on the secondary merged
 	// search just drops that section rather than blanking everything.
-	mergedQ := "author:@me is:pr merged:>=" + now.Format("2006-01-02")
-	if opts.org != "" {
-		mergedQ += " org:" + opts.org
-	}
 	mergedToday := 0
-	if merged, total, err := fetchPRs(mergedQ, mergedLimit); err == nil {
+	if merged, total, err := fetchPRs(mergedQuery(now, opts.org), mergedLimit); err == nil {
 		mergedToday = total
 		rows = append(rows, buildMergedRows(merged, opts.org, now)...)
 	}
@@ -114,6 +122,10 @@ func fetchAndRender(w io.Writer, opts options) error {
 	if opts.repo != "" && len(filtered) == 0 {
 		fmt.Fprintf(os.Stderr, "warning: --repo %q matched no PRs\n", opts.repo)
 	}
-	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor, mergedTotal), m))
+	total := mergedTotal
+	if opts.repo != "" {
+		total = 0
+	}
+	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor, total), m))
 	return err
 }
