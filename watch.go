@@ -22,10 +22,10 @@ func watchLoop(opts options) {
 	fmt.Print("\033[?1049h\033[?25l")
 	defer fmt.Print("\033[?25h\033[?1049l")
 
-	defer os.Stdin.Close()
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		defer os.Stdin.Close()
 	}
 
 	dataTicker := time.NewTicker(opts.interval)
@@ -97,7 +97,7 @@ func watchLoop(opts options) {
 				debounceCh = time.After(500 * time.Millisecond)
 			case b == 13: // Enter
 				debounceCh = nil
-				fireNumber(digitBuf, cachedRows, opts.repo)
+				fireNumber(digitBuf, filterRows(cachedRows, opts.repo))
 				digitBuf = digitBuf[:0]
 			case b == 27: // Escape
 				debounceCh = nil
@@ -105,7 +105,7 @@ func watchLoop(opts options) {
 			}
 		case <-debounceCh:
 			debounceCh = nil
-			fireNumber(digitBuf, cachedRows, opts.repo)
+			fireNumber(digitBuf, filterRows(cachedRows, opts.repo))
 			digitBuf = digitBuf[:0]
 		case <-dataTicker.C:
 			startFetch()
@@ -173,13 +173,12 @@ func openBrowser(url string) {
 	}
 }
 
-func fireNumber(digits []byte, rows []Row, repo string) {
+func fireNumber(digits []byte, rows []Row) {
 	num, err := strconv.Atoi(string(digits))
 	if err != nil || num <= 0 {
 		return
 	}
-	filtered := filterRows(rows, repo)
-	if num <= len(filtered) {
-		openBrowser(filtered[num-1].URL)
+	if num <= len(rows) {
+		openBrowser(rows[num-1].URL)
 	}
 }
