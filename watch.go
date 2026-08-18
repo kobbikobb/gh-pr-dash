@@ -22,11 +22,11 @@ func watchLoop(opts options) {
 	fmt.Print("\033[?1049h\033[?25l")
 	defer fmt.Print("\033[?25h\033[?1049l")
 
+	defer os.Stdin.Close()
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
 	}
-	defer os.Stdin.Close()
 
 	dataTicker := time.NewTicker(opts.interval)
 	animTicker := time.NewTicker(200 * time.Millisecond)
