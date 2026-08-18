@@ -185,14 +185,12 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
-	tierNum := 0
 	for i, r := range rows {
 		if r.Tier != tier {
 			if tier != -1 {
 				b.WriteString("\n")
 			}
 			tier = r.Tier
-			tierNum = 0
 			name := "?"
 			if tier >= 0 && tier < len(tierNames) {
 				count := counts[tier]
@@ -208,8 +206,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			b.WriteString(p.b + color + name + p.z + "\n")
 		}
 
-		tierNum++
-		num := p.d + padRight(strconv.Itoa(tierNum)+".", 2) + p.z
+		num := p.d + padRight(strconv.Itoa(i+1)+".", 2) + p.z
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		idle := idleField(r, p)
