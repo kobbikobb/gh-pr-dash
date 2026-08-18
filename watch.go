@@ -53,7 +53,7 @@ func watchLoop(opts options) {
 	var errMsg string
 	var lastFetch, nextRefresh time.Time
 	var digitBuf []byte
-	var debounceTimer *time.Timer
+	var debounceCh <-chan time.Time
 
 	// Fetch off the render loop so the network never stalls the animation or a
 	// Ctrl-C; each fetch delivers its result over the channel as a select case.
@@ -94,37 +94,19 @@ func watchLoop(opts options) {
 				return
 			case b >= '0' && b <= '9':
 				digitBuf = append(digitBuf, b)
-				if debounceTimer != nil {
-					debounceTimer.Stop()
-				}
-				debounceTimer = time.AfterFunc(500*time.Millisecond, func() {
-					num, err := strconv.Atoi(string(digitBuf))
-					if err == nil && num > 0 {
-						filtered := filterRows(cachedRows, opts.repo)
-						if num <= len(filtered) {
-							openBrowser(filtered[num-1].URL)
-						}
-					}
-					digitBuf = digitBuf[:0]
-				})
+				debounceCh = time.After(500 * time.Millisecond)
 			case b == 13: // Enter
-				if debounceTimer != nil {
-					debounceTimer.Stop()
-				}
-				num, err := strconv.Atoi(string(digitBuf))
-				if err == nil && num > 0 {
-					filtered := filterRows(cachedRows, opts.repo)
-					if num <= len(filtered) {
-						openBrowser(filtered[num-1].URL)
-					}
-				}
+				debounceCh = nil
+				fireNumber(digitBuf, cachedRows, opts.repo)
 				digitBuf = digitBuf[:0]
 			case b == 27: // Escape
-				if debounceTimer != nil {
-					debounceTimer.Stop()
-				}
+				debounceCh = nil
 				digitBuf = digitBuf[:0]
 			}
+		case <-debounceCh:
+			debounceCh = nil
+			fireNumber(digitBuf, cachedRows, opts.repo)
+			digitBuf = digitBuf[:0]
 		case <-dataTicker.C:
 			startFetch()
 			tick++
@@ -188,5 +170,16 @@ func openBrowser(url string) {
 		exec.Command("xdg-open", url).Start()
 	case "windows":
 		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	}
+}
+
+func fireNumber(digits []byte, rows []Row, repo string) {
+	num, err := strconv.Atoi(string(digits))
+	if err != nil || num <= 0 {
+		return
+	}
+	filtered := filterRows(rows, repo)
+	if num <= len(filtered) {
+		openBrowser(filtered[num-1].URL)
 	}
 }
