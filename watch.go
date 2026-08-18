@@ -24,8 +24,8 @@ func watchLoop(opts options) {
 
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err == nil {
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		defer os.Stdin.Close()
+		defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+		defer func() { _ = os.Stdin.Close() }()
 	}
 
 	dataTicker := time.NewTicker(opts.interval)
@@ -165,11 +165,11 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 func openBrowser(url string) {
 	switch runtime.GOOS {
 	case "darwin":
-		exec.Command("open", url).Start()
+		_ = exec.Command("open", url).Start()
 	case "linux":
-		exec.Command("xdg-open", url).Start()
+		_ = exec.Command("xdg-open", url).Start()
 	case "windows":
-		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	}
 }
 
