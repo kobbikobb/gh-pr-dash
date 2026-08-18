@@ -16,6 +16,7 @@ fmt:
 	gofmt -w .
 
 install: build
+	gh extension remove pr-dash 2>/dev/null || true
 	gh extension install .
 
 uninstall:
