@@ -26,6 +26,7 @@ func watchLoop(opts options) {
 	if err == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
 	}
+	defer os.Stdin.Close()
 
 	dataTicker := time.NewTicker(opts.interval)
 	animTicker := time.NewTicker(200 * time.Millisecond)
@@ -89,6 +90,8 @@ func watchLoop(opts options) {
 			}
 		case b := <-keyCh:
 			switch {
+			case b == 'q' || b == 3: // q or Ctrl-C
+				return
 			case b >= '0' && b <= '9':
 				digitBuf = append(digitBuf, b)
 				if debounceTimer != nil {
