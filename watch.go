@@ -175,7 +175,7 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		}
 		out += renderTerminal(filtered, inner, t.useColor, total)
 	}
-	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\n")
+	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\r\n")
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
 }
