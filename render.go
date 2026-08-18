@@ -154,7 +154,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 26 // actual chars: indent(1) + num(3) + "  " + ci(1) + "  " + merge(8) + "  " + idle(5) + "  "
+	const prefixW = 25 // indent(1) + num(2) + "  " + ci(1) + "  " + merge(8) + "  " + idle(5) + "  "
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -209,7 +209,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		}
 
 		tierNum++
-		num := p.d + padRight(strconv.Itoa(tierNum)+".", 3) + p.z
+		num := p.d + padRight(strconv.Itoa(tierNum)+".", 2) + p.z
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		idle := idleField(r, p)
