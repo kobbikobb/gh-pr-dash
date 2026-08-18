@@ -3,10 +3,15 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 func watchLoop(opts options) {
@@ -17,10 +22,29 @@ func watchLoop(opts options) {
 	fmt.Print("\033[?1049h\033[?25l")
 	defer fmt.Print("\033[?25h\033[?1049l")
 
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err == nil {
+		defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+		defer func() { _ = os.Stdin.Close() }()
+	}
+
 	dataTicker := time.NewTicker(opts.interval)
 	animTicker := time.NewTicker(200 * time.Millisecond)
 	defer dataTicker.Stop()
 	defer animTicker.Stop()
+
+	keyCh := make(chan byte, 32)
+	if err == nil {
+		go func() {
+			buf := make([]byte, 1)
+			for {
+				if _, err := os.Stdin.Read(buf); err != nil {
+					return
+				}
+				keyCh <- buf[0]
+			}
+		}()
+	}
 
 	tick := 0
 	lastWidth := 0
@@ -28,6 +52,8 @@ func watchLoop(opts options) {
 	var cachedMergedTotal int
 	var errMsg string
 	var lastFetch, nextRefresh time.Time
+	var digitBuf []byte
+	var debounceCh <-chan time.Time
 
 	// Fetch off the render loop so the network never stalls the animation or a
 	// Ctrl-C; each fetch delivers its result over the channel as a select case.
@@ -62,6 +88,25 @@ func watchLoop(opts options) {
 				lastFetch = time.Now()
 				errMsg = ""
 			}
+		case b := <-keyCh:
+			switch {
+			case b == 'q' || b == 3: // q or Ctrl-C
+				return
+			case b >= '0' && b <= '9':
+				digitBuf = append(digitBuf, b)
+				debounceCh = time.After(500 * time.Millisecond)
+			case b == 13: // Enter
+				debounceCh = nil
+				fireNumber(digitBuf, filterRows(cachedRows, opts.repo))
+				digitBuf = digitBuf[:0]
+			case b == 27: // Escape
+				debounceCh = nil
+				digitBuf = digitBuf[:0]
+			}
+		case <-debounceCh:
+			debounceCh = nil
+			fireNumber(digitBuf, filterRows(cachedRows, opts.repo))
+			digitBuf = digitBuf[:0]
 		case <-dataTicker.C:
 			startFetch()
 			tick++
@@ -112,7 +157,28 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		}
 		out += renderTerminal(filtered, inner, t.useColor, total)
 	}
-	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\n")
+	out = strings.ReplaceAll(indent(out, m), "\n", "\033[K\r\n")
 	_, _ = fmt.Fprint(os.Stdout, out)
 	fmt.Print("\033[J")
+}
+
+func openBrowser(url string) {
+	switch runtime.GOOS {
+	case "darwin":
+		_ = exec.Command("open", url).Start()
+	case "linux":
+		_ = exec.Command("xdg-open", url).Start()
+	case "windows":
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	}
+}
+
+func fireNumber(digits []byte, rows []Row) {
+	num, err := strconv.Atoi(string(digits))
+	if err != nil || num <= 0 {
+		return
+	}
+	if num <= len(rows) {
+		openBrowser(rows[num-1].URL)
+	}
 }

@@ -154,7 +154,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	const prefixW = 2 + 1 + 2 + 8 + 2 + idleW + 2 // indent + ci + merge(8) + idle(idleW) + double-spaces
+	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
+	prefixW := 1 + numW + 2 + 1 + 2 + 8 + 2 + idleW + 2
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -206,14 +207,15 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			b.WriteString(p.b + color + name + p.z + "\n")
 		}
 
+		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
 		title := padRight(truncate(titles[i], titleW), titleW)
 		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, "  %s  %s  %s  %s  %s   %s\n",
-			ciGlyph(r.CI, p), merge, idle, repo, title, url)
+		fmt.Fprintf(&b, " %s  %s  %s  %s  %s  %s   %s\n",
+			num, ciGlyph(r.CI, p), merge, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], mergedShown, p.z)
