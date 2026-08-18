@@ -1,0 +1,33 @@
+language: go
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  path_instructions:
+    - path: "pr.go"
+      instructions: >
+        Row holds status codes (ci, merge, review), not display strings.
+        Renderers map codes to glyphs/colors. Keep display logic out of pr.go.
+        Ranking: tierNeedsAction < tierReady < tierBuilding < tierWaiting < tierDrafts < tierMerged.
+    - path: "render.go"
+      instructions: >
+        ANSI escapes must never count toward column width — pad plain string,
+        then wrap in color. Use rune-count not byte-count for widths.
+        URLs stay plain text (no color/decorate) so they remain cmd-clickable through tmux.
+    - path: "dash.go"
+      instructions: >
+        detectTerminal handles width and NO_COLOR/TTY detection.
+        fetchAndRender orchestrates fetch -> build -> render for both JSON and terminal.
+    - path: "header.go"
+      instructions: >
+        ASCII-art box header, static and animated (watch) variants.
+    - path: "watch.go"
+      instructions: >
+        --watch loop: 1-min data ticker + 200ms animation ticker, cursor-home redraw.
+  tools:
+    ruff:
+      enabled: false
+  plugins: []
