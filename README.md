@@ -43,7 +43,27 @@ gh pr-dash               # all your open PRs, ranked
 gh pr-dash --org my-org  # scope to one org/owner
 gh pr-dash --json        # raw JSON rows (for scripts)
 gh pr-dash 50            # cap at 50 PRs (default 100)
+gh pr-dash --watch       # interactive dashboard, refreshes every minute
 ```
+
+### Watch mode keys
+
+Pick an action, then a target. Nothing happens on a bare number.
+
+| Key | Action |
+|---|---|
+| `o` | open PRs in the browser (max 10 at once) |
+| `m` | merge — only **ready** PRs; lists them and waits for `y` |
+| `x` | send PRs to an agent |
+| `s` | Slack — not implemented |
+| `q` | quit |
+
+Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI, `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
+
+Environment:
+
+- `GH_PR_DASH_MERGE_FLAGS` — flags for `gh pr merge` (default `--squash`).
+- `GH_PR_DASH_AGENT_CMD` — command to run with the PR list as its last argument (e.g. `claude -p`). The agent runs detached and its output is discarded. Unset, the list is copied to the clipboard instead. The status line says which happened.
 
 ## Ranking
 
