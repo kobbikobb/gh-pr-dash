@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -167,5 +169,89 @@ func TestAgentMessageListsTargets(t *testing.T) {
 
 	if !strings.Contains(got, "merge ready PRs") || !strings.Contains(got, "- [a#2] good - u") {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestPastedTargetsAreAccepted(t *testing.T) {
+	m := testModel()
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	next, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1,2 3"), Paste: true})
+
+	if got := next.(watchModel).input; got != "1,2 3" {
+		t.Errorf("input=%q, want pasted text", got)
+	}
+}
+
+func TestMergeResultDiscardsPreMergeFetches(t *testing.T) {
+	m := testModel()
+	m.merging = true
+	m.fetchSeq = 4
+	m.deferred = &fetchMsg{seq: 4, rows: []Row{{Ref: "stale#1", Tier: tierReady}}}
+
+	next, cmd := m.Update(mergeMsg{merged: 1})
+	m = next.(watchModel)
+
+	if m.rows[0].Ref != "a#1" || m.deferred != nil || cmd == nil {
+		t.Errorf("rows=%v deferred=%v cmd=%v: stale fetch applied or no refetch", m.rows, m.deferred, cmd)
+	}
+	next, _ = m.Update(fetchMsg{seq: 4, rows: []Row{{Ref: "stale#1"}}})
+	if next.(watchModel).rows[0].Ref != "a#1" {
+		t.Error("in-flight pre-merge fetch overwrote rows")
+	}
+}
+
+func TestFooterSurvivesShortTerminal(t *testing.T) {
+	rows := make([]Row, 30)
+	for i := range rows {
+		rows[i] = Row{Ref: "a#1", Title: "t", Tier: tierWaiting, URL: "u"}
+	}
+
+	out := renderWatch(options{}, 0, rows, 0, "", "x", "FOOTER-LINE", terminal{width: 100, height: 12})
+
+	if !strings.Contains(out, "FOOTER-LINE") || strings.Count(out, "\n")+1 > 12 {
+		t.Errorf("footer missing or frame taller than terminal:\n%s", out)
+	}
+}
+
+func fakeBin(t *testing.T, name, script string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestMergeCmdReportsSuccessAndFailure(t *testing.T) {
+	fakeBin(t, "gh", `case "$3" in *bad*) echo "not mergeable" >&2; exit 1;; esac`)
+	rows := []Row{{Ref: "a#1", URL: "https://x/good"}, {Ref: "a#2", URL: "https://x/bad"}}
+
+	res := mergeCmd(rows)().(mergeMsg)
+
+	if res.merged != 1 || len(res.failed) != 1 || res.failed[0] != "a#2: not mergeable" {
+		t.Errorf("got %+v", res)
+	}
+}
+
+func TestDeliverToAgentReportsWhatHappened(t *testing.T) {
+	t.Setenv("GH_PR_DASH_AGENT_CMD", "true")
+	if how, err := deliverToAgent("msg"); err != nil || how != "started true" {
+		t.Errorf("how=%q err=%v", how, err)
+	}
+
+	t.Setenv("GH_PR_DASH_AGENT_CMD", "/nonexistent/agent")
+	if _, err := deliverToAgent("msg"); err == nil {
+		t.Error("expected an error for a missing agent binary")
+	}
+}
+
+func TestPasteNeverTriggersActions(t *testing.T) {
+	m := testModel()
+	m.confirm = []Row{m.rows[1]}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y"), Paste: true})
+
+	if got := next.(watchModel); got.merging || got.confirm == nil || cmd != nil {
+		t.Error("pasted 'y' confirmed a merge")
 	}
 }

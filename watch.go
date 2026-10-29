@@ -155,7 +155,10 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mergeMsg:
 		m.merging = false
 		m.status = mergeStatus(msg)
+		// Anything fetched before the merge finished is stale; only the fetch
+		// issued now may replace the rows.
 		m.fetchSeq++
+		m.appliedSeq, m.deferred = m.fetchSeq, nil
 		return m.settle(), m.fetchCmd(m.fetchSeq)
 	case tea.KeyMsg:
 		next, cmd := m.key(msg)
@@ -166,6 +169,14 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
 	k := msg.String()
+	if msg.Paste {
+		// Pasted text is only meaningful as target numbers; never let it
+		// trigger an action or a confirmation.
+		if m.action == 0 || m.confirm != nil || m.merging {
+			return m, nil
+		}
+		k = string(msg.Runes)
+	}
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
@@ -217,7 +228,7 @@ func (m watchModel) keyTarget(k string, rows []Row) (watchModel, tea.Cmd) {
 		}
 	case k == "enter":
 		return m.run(parseTargets(m.input, rows), "")
-	case len(k) == 1 && (k[0] >= '0' && k[0] <= '9' || k[0] == ',' || k[0] == ' '):
+	case isTargetText(k):
 		m.input += k
 	case m.input == "" && k == "a":
 		return m.run(openRows(rows), "a")
@@ -227,6 +238,19 @@ func (m watchModel) keyTarget(k string, rows []Row) (watchModel, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// isTargetText accepts digits, commas and spaces, including pasted runs.
+func isTargetText(k string) bool {
+	if k == "" {
+		return false
+	}
+	for _, c := range k {
+		if (c < '0' || c > '9') && c != ',' && c != ' ' {
+			return false
+		}
+	}
+	return true
 }
 
 func openRows(rows []Row) []Row {
