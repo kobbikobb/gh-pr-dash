@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,17 +23,35 @@ func watchLoop(opts options) {
 	}
 }
 
-const animInterval = 200 * time.Millisecond
+const (
+	animInterval = 200 * time.Millisecond
+	maxOpen      = 10 // refuse to open more browser tabs than this at once
+	maxStatus    = 5  // failure lines shown after a merge
+	mergeTimeout = time.Minute
+)
 
 type (
 	fetchMsg struct {
+		seq         int
 		rows        []Row
 		mergedTotal int
 		err         error
 	}
-	animMsg struct{}
-	dataMsg struct{}
+	animMsg  struct{}
+	dataMsg  struct{}
+	mergeMsg struct {
+		merged int
+		failed []string
+	}
 )
+
+// groupTiers maps a group key to its tier; 'a' (all open) is handled separately.
+var groupTiers = map[string]int{
+	"n": tierNeedsAction, "r": tierReady, "c": tierBuilding,
+	"w": tierWaiting, "d": tierDrafts, "t": tierMerged,
+}
+
+var actionNames = map[rune]string{'o': "open", 'm': "merge", 'x': "agent"}
 
 type watchModel struct {
 	opts          options
@@ -45,36 +63,74 @@ type watchModel struct {
 	errMsg        string
 	lastFetch     time.Time
 	nextRefresh   time.Time
-	action        rune   // pending action key (o/m/x/s) awaiting a target
-	input         string // typed PR numbers for the pending action
-	confirm       []Row  // PRs awaiting y/n confirmation to merge
-	status        string // result of the last action
-}
 
-type mergeMsg struct{ merged, failed []string }
+	fetchSeq   int       // newest fetch issued
+	appliedSeq int       // newest fetch applied
+	deferred   *fetchMsg // result held back while the user is mid-action
+
+	action  rune   // pending action key (o/m/x) awaiting a target
+	input   string // typed PR numbers for the pending action
+	confirm []Row  // PRs awaiting y/n confirmation to merge
+	skipped int    // targets left out of the merge because they aren't ready
+	merging bool
+	status  string // result of the last action; may span lines
+}
 
 func newWatchModel(opts options) watchModel {
 	return watchModel{
 		opts:        opts,
 		useColor:    detectTerminal().useColor,
 		nextRefresh: time.Now().Add(opts.interval),
+		fetchSeq:    1,
 	}
 }
 
-func (m watchModel) fetchCmd() tea.Cmd {
+func (m watchModel) fetchCmd(seq int) tea.Cmd {
 	opts := m.opts
 	return func() tea.Msg {
 		rows, total, err := fetchRows(opts, time.Now())
-		return fetchMsg{rows, total, err}
+		return fetchMsg{seq, rows, total, err}
 	}
 }
 
+func animTick() tea.Cmd {
+	return tea.Tick(animInterval, func(time.Time) tea.Msg { return animMsg{} })
+}
+
+func (m watchModel) dataTick() tea.Cmd {
+	return tea.Tick(m.opts.interval, func(time.Time) tea.Msg { return dataMsg{} })
+}
+
 func (m watchModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.fetchCmd(),
-		tea.Tick(animInterval, func(time.Time) tea.Msg { return animMsg{} }),
-		tea.Tick(m.opts.interval, func(time.Time) tea.Msg { return dataMsg{} }),
-	)
+	return tea.Batch(m.fetchCmd(m.fetchSeq), animTick(), m.dataTick())
+}
+
+// busy is true while the user is typing a target, confirming, or a merge runs.
+// Fetch results are held back then so row numbers don't shift under the user.
+func (m watchModel) busy() bool {
+	return m.action != 0 || m.confirm != nil || m.merging
+}
+
+func (m watchModel) applyFetch(msg fetchMsg) watchModel {
+	if msg.seq < m.appliedSeq {
+		return m
+	}
+	m.appliedSeq = msg.seq
+	if msg.err != nil {
+		m.errMsg = msg.err.Error()
+		return m
+	}
+	m.rows, m.mergedTotal, m.errMsg = msg.rows, msg.mergedTotal, ""
+	m.lastFetch = time.Now()
+	return m
+}
+
+func (m watchModel) settle() watchModel {
+	if !m.busy() && m.deferred != nil {
+		m = m.applyFetch(*m.deferred)
+		m.deferred = nil
+	}
+	return m
 }
 
 func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -82,88 +138,92 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case fetchMsg:
-		if msg.err != nil {
-			m.errMsg = msg.err.Error()
+		if m.busy() {
+			if m.deferred == nil || msg.seq > m.deferred.seq {
+				m.deferred = &msg
+			}
 		} else {
-			m.rows, m.mergedTotal, m.errMsg = msg.rows, msg.mergedTotal, ""
-			m.lastFetch = time.Now()
+			m = m.applyFetch(msg)
 		}
 	case animMsg:
 		m.tick++
-		return m, tea.Tick(animInterval, func(time.Time) tea.Msg { return animMsg{} })
+		return m, animTick()
 	case dataMsg:
 		m.nextRefresh = time.Now().Add(m.opts.interval)
-		return m, tea.Batch(m.fetchCmd(), tea.Tick(m.opts.interval, func(time.Time) tea.Msg { return dataMsg{} }))
+		m.fetchSeq++
+		return m, tea.Batch(m.fetchCmd(m.fetchSeq), m.dataTick())
 	case mergeMsg:
+		m.merging = false
 		m.status = mergeStatus(msg)
-		return m, m.fetchCmd()
+		m.fetchSeq++
+		return m.settle(), m.fetchCmd(m.fetchSeq)
 	case tea.KeyMsg:
-		return m.handleKey(msg)
+		next, cmd := m.key(msg)
+		return next.settle(), cmd
 	}
 	return m, nil
 }
 
-// groupTiers maps a group key to its tier; 'a' (all open) is handled separately.
-var groupTiers = map[string]int{
-	"n": tierNeedsAction, "r": tierReady, "c": tierBuilding,
-	"w": tierWaiting, "d": tierDrafts, "t": tierMerged,
-}
-
-var actionNames = map[string]string{"o": "open", "m": "merge", "x": "agent", "s": "slack"}
-
-func (m watchModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	rows := filterRows(m.rows, m.opts.repo)
-	key := msg.String()
-
-	if key == "ctrl+c" {
+func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
+	k := msg.String()
+	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
+	rows := filterRows(m.rows, m.opts.repo)
 
-	if m.confirm != nil {
-		pending := m.confirm
-		m.confirm = nil
-		if key == "y" || key == "Y" {
-			m.status = fmt.Sprintf("merging %d PR(s)…", len(pending))
-			return m, mergeCmd(pending)
-		}
-		m.status = "merge cancelled"
+	switch {
+	case m.merging:
 		return m, nil
+	case m.confirm != nil:
+		return m.keyConfirm(k)
+	case m.action != 0:
+		return m.keyTarget(k, rows)
 	}
 
-	if m.action != 0 {
-		return m.handleTarget(key, rows)
-	}
-
-	switch key {
+	switch k {
 	case "q":
 		return m, tea.Quit
-	case "o", "m", "x", "s":
-		m.action, m.input, m.status = rune(key[0]), "", ""
-	case "p":
-		popupToAgentWaiting(rows)
+	case "o", "m", "x":
+		m.action, m.input, m.status = rune(k[0]), "", ""
+	case "s":
+		m.status = "slack: not implemented"
 	}
 	return m, nil
 }
 
-// handleTarget collects the target of a pending action: PR numbers (1,3 5)
+func (m watchModel) keyConfirm(k string) (watchModel, tea.Cmd) {
+	switch k {
+	case "y", "Y":
+		pending := m.confirm
+		m.confirm, m.skipped, m.merging = nil, 0, true
+		m.status = fmt.Sprintf("merging %d PR(s)…", len(pending))
+		return m, mergeCmd(pending)
+	case "n", "N", "esc":
+		m.confirm, m.skipped = nil, 0
+		m.status = "merge cancelled"
+	}
+	return m, nil
+}
+
+// keyTarget collects the target of a pending action: PR numbers (1,3 5)
 // confirmed with Enter, or a group key that applies to the whole group.
-func (m watchModel) handleTarget(key string, rows []Row) (tea.Model, tea.Cmd) {
+func (m watchModel) keyTarget(k string, rows []Row) (watchModel, tea.Cmd) {
 	switch {
-	case key == "esc":
+	case k == "esc":
 		m.action, m.input = 0, ""
-	case key == "backspace":
+	case k == "backspace":
 		if m.input != "" {
 			m.input = m.input[:len(m.input)-1]
 		}
-	case key == "enter":
+	case k == "enter":
 		return m.run(parseTargets(m.input, rows), "")
-	case len(key) == 1 && (key[0] >= '0' && key[0] <= '9' || key[0] == ',' || key[0] == ' '):
-		m.input += key
-	case m.input == "" && key == "a":
+	case len(k) == 1 && (k[0] >= '0' && k[0] <= '9' || k[0] == ',' || k[0] == ' '):
+		m.input += k
+	case m.input == "" && k == "a":
 		return m.run(openRows(rows), "a")
 	case m.input == "":
-		if tier, ok := groupTiers[key]; ok {
-			return m.run(tierRows(rows, tier), key)
+		if tier, ok := groupTiers[k]; ok {
+			return m.run(tierRows(rows, tier), k)
 		}
 	}
 	return m, nil
@@ -190,7 +250,7 @@ func tierRows(rows []Row, tier int) []Row {
 }
 
 // parseTargets resolves "1,3 5" against the displayed row numbers, ignoring
-// anything out of range.
+// anything out of range or repeated.
 func parseTargets(input string, rows []Row) []Row {
 	var out []Row
 	seen := map[int]bool{}
@@ -205,44 +265,54 @@ func parseTargets(input string, rows []Row) []Row {
 	return out
 }
 
-func (m watchModel) run(targets []Row, group string) (tea.Model, tea.Cmd) {
-	action := string(m.action)
+func (m watchModel) run(targets []Row, group string) (watchModel, tea.Cmd) {
+	action := m.action
 	m.action, m.input = 0, ""
 	if len(targets) == 0 {
 		m.status = "no matching PRs"
 		return m, nil
 	}
+
 	switch action {
-	case "o":
-		for _, r := range targets {
-			openBrowser(r.URL)
-		}
-		m.status = fmt.Sprintf("opened %d PR(s)", len(targets))
-	case "m":
-		var mergeable []Row
-		for _, r := range targets {
-			if r.Tier != tierMerged {
-				mergeable = append(mergeable, r)
-			}
-		}
-		if len(mergeable) == 0 {
-			m.status = "already merged"
+	case 'o':
+		m.status = openStatus(targets)
+	case 'm':
+		ready := tierRows(targets, tierReady)
+		if len(ready) == 0 {
+			m.status = "nothing to merge: only ready PRs (approved, CI green, no conflicts) can be merged"
 			return m, nil
 		}
-		m.confirm = mergeable
-	case "x":
-		if group == "a" {
-			sendToAgentAllOpen(targets)
-		} else if tier, ok := groupTiers[group]; ok {
-			sendToAgentTier(targets, tier)
+		m.confirm, m.skipped = ready, len(targets)-len(ready)
+	case 'x':
+		how, err := deliverToAgent(agentMessage(agentHeader(group), targets))
+		if err != nil {
+			m.status = "agent failed: " + err.Error()
 		} else {
-			sendToAgentTier(targets, -1)
+			m.status = fmt.Sprintf("agent: %s (%d PR(s))", how, len(targets))
 		}
-		m.status = fmt.Sprintf("sent %d PR(s) to agent", len(targets))
-	case "s":
-		m.status = "slack: not implemented"
 	}
 	return m, nil
+}
+
+func openStatus(targets []Row) string {
+	if len(targets) > maxOpen {
+		return fmt.Sprintf("refusing to open %d PRs at once (max %d); pick fewer", len(targets), maxOpen)
+	}
+	opened := 0
+	var firstErr error
+	for _, r := range targets {
+		if err := openBrowser(r.URL); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		opened++
+	}
+	if firstErr != nil {
+		return fmt.Sprintf("opened %d of %d PR(s); failed: %v", opened, len(targets), firstErr)
+	}
+	return fmt.Sprintf("opened %d PR(s)", opened)
 }
 
 func mergeCmd(rows []Row) tea.Cmd {
@@ -253,41 +323,74 @@ func mergeCmd(rows []Row) tea.Cmd {
 	return func() tea.Msg {
 		var res mergeMsg
 		for _, r := range rows {
+			ctx, cancel := context.WithTimeout(context.Background(), mergeTimeout)
 			args := append([]string{"pr", "merge", r.URL}, flags...)
-			if out, err := exec.Command("gh", args...).CombinedOutput(); err != nil {
-				res.failed = append(res.failed, r.Ref+": "+strings.TrimSpace(string(out)))
+			out, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
+			cancel()
+			if err != nil {
+				res.failed = append(res.failed, r.Ref+": "+lastLine(string(out), err))
 			} else {
-				res.merged = append(res.merged, r.Ref)
+				res.merged++
 			}
 		}
 		return res
 	}
 }
 
-func mergeStatus(r mergeMsg) string {
-	s := fmt.Sprintf("merged %d", len(r.merged))
-	if len(r.failed) > 0 {
-		s += fmt.Sprintf(", %d failed: %s", len(r.failed), strings.Join(r.failed, "; "))
+// lastLine picks the most informative line of gh's output (its error is last).
+func lastLine(out string, err error) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if l := strings.TrimSpace(lines[len(lines)-1]); l != "" {
+		return l
 	}
-	return s
+	return err.Error()
 }
 
-// footer is the bottom help/prompt line for the current input state.
-func (m watchModel) footer(rows []Row) string {
+func mergeStatus(r mergeMsg) string {
+	if len(r.failed) == 0 {
+		return fmt.Sprintf("merged %d PR(s)", r.merged)
+	}
+	lines := []string{fmt.Sprintf("merged %d, %d failed:", r.merged, len(r.failed))}
+	for i, f := range r.failed {
+		if i == maxStatus {
+			lines = append(lines, fmt.Sprintf("  … and %d more", len(r.failed)-maxStatus))
+			break
+		}
+		lines = append(lines, "  ✗ "+f)
+	}
+	return strings.Join(lines, "\n")
+}
+
+const groupHint = "[n]eeds [r]eady [c]i [w]aiting [d]rafts [t]oday [a]ll"
+
+// footer is the bottom help/prompt block (one or more lines) for the current
+// input state.
+func (m watchModel) footer() string {
 	switch {
 	case m.confirm != nil:
-		refs := make([]string, len(m.confirm))
-		for i, r := range m.confirm {
-			refs[i] = r.Ref
+		head := fmt.Sprintf("Merge %d PR(s)?", len(m.confirm))
+		if m.skipped > 0 {
+			head += fmt.Sprintf(" (%d not ready, skipped)", m.skipped)
 		}
-		return fmt.Sprintf("Merge %d PR(s): %s ?  [y] confirm · any other key cancels", len(refs), strings.Join(refs, ", "))
+		lines := []string{head}
+		for i, r := range m.confirm {
+			if i == maxStatus+3 {
+				lines = append(lines, fmt.Sprintf("  … and %d more", len(m.confirm)-i))
+				break
+			}
+			lines = append(lines, "  "+r.Ref+"  "+r.Title)
+		}
+		return strings.Join(append(lines, "[y] merge · [n]/esc cancel"), "\n")
 	case m.action != 0:
-		return fmt.Sprintf("%s › %s▏  numbers (1,3) + enter · group: [n]eeds [r]eady [c]i [w]aiting [d]rafts [t]oday [a]ll · esc cancel",
-			actionNames[string(m.action)], m.input)
+		hint := "numbers (1,3) + enter, or a group now: " + groupHint + " · esc cancel"
+		if m.input != "" {
+			hint = "enter run · backspace edit · esc cancel"
+		}
+		return actionNames[m.action] + " › " + m.input + "▏\n" + hint
 	}
-	help := "[o]pen  [m]erge  [x] agent  [s]lack  then PR numbers + enter, or a group · [p] popup · [q] quit"
+	help := "[o]pen  [m]erge  [x] agent — then PR numbers + enter, or a group · [q] quit"
 	if m.status != "" {
-		return m.status + "   |   " + help
+		return m.status + "\n" + help
 	}
 	return help
 }
@@ -297,7 +400,7 @@ func (m watchModel) View() string {
 		return ""
 	}
 	t := terminal{width: m.width, height: m.height, useColor: m.useColor}
-	return renderWatch(m.opts, m.tick, m.rows, m.mergedTotal, m.errMsg, refreshStatus(m.lastFetch, m.nextRefresh), m.footer(filterRows(m.rows, m.opts.repo)), t)
+	return renderWatch(m.opts, m.tick, m.rows, m.mergedTotal, m.errMsg, refreshStatus(m.lastFetch, m.nextRefresh), m.footer(), t)
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {
@@ -334,184 +437,16 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		}
 		out += renderTerminal(filtered, inner, t.useColor, total)
 	}
+
+	footLines := strings.Split(footer, "\n")
+	for i, l := range footLines {
+		footLines[i] = p.d + "  " + truncate(l, inner-2) + p.z
+	}
+
+	// Keep the footer visible on short terminals by clipping the body instead.
 	body := strings.Split(indent(out, m), "\n")
-	if t.height > 2 && len(body) > t.height-2 {
-		body = body[:t.height-2]
+	if keep := t.height - len(footLines); keep > 0 && len(body) > keep {
+		body = body[:keep]
 	}
-	foot := p.d + "  " + truncate(footer, inner-2) + p.z
-	return strings.Join(body, "\n") + "\n" + indent(foot, m)
-}
-
-func openBrowser(url string) {
-	switch runtime.GOOS {
-	case "darwin":
-		_ = exec.Command("open", url).Start()
-	case "linux":
-		_ = exec.Command("xdg-open", url).Start()
-	case "windows":
-		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	}
-}
-
-func buildAgentMessage(tier int, rows []Row) string {
-	var sb strings.Builder
-	switch tier {
-	case -1:
-		sb.WriteString("Please review and take action on these PRs:\n\n")
-	case tierNeedsAction:
-		sb.WriteString("Please review and take action on PRs that need attention (CI failures/conflicts):\n\n")
-	case tierReady:
-		sb.WriteString("Please review and merge ready PRs (approved, green, no conflicts):\n\n")
-	case tierBuilding:
-		sb.WriteString("Please monitor/check PRs waiting on CI:\n\n")
-	case tierWaiting:
-		sb.WriteString("Please review PRs waiting for review:\n\n")
-	case tierDrafts:
-		sb.WriteString("Please review draft PRs:\n\n")
-	case tierMerged:
-		sb.WriteString("Please summarize/review recently merged PRs:\n\n")
-	}
-	for i, r := range rows {
-		if tier != -1 && r.Tier != tier {
-			continue
-		}
-		sb.WriteString(fmt.Sprintf("%d. [%s] %s - %s\n", i+1, r.Ref, r.Title, r.URL))
-	}
-	return sb.String()
-}
-
-func buildAgentMessageAllOpen(rows []Row) string {
-	var sb strings.Builder
-	sb.WriteString("Please review all open PRs across categories:\n\n")
-	for i, r := range rows {
-		if r.Tier == tierMerged {
-			continue
-		}
-		sb.WriteString(fmt.Sprintf("%d. [%s] %s - %s\n", i+1, r.Ref, r.Title, r.URL))
-	}
-	return sb.String()
-}
-
-func sendToAgentTier(rows []Row, tier int) {
-	msg := buildAgentMessage(tier, rows)
-	sendToAgent(msg)
-}
-
-func sendToAgentAllOpen(rows []Row) {
-	msg := buildAgentMessageAllOpen(rows)
-	sendToAgent(msg)
-}
-
-func sendToAgent(msg string) {
-	tmpfile := "/tmp/gh-pr-dash-agent-msg.txt"
-	_ = os.WriteFile(tmpfile, []byte(msg), 0644)
-
-	if cmd := os.Getenv("GH_PR_DASH_AGENT_CMD"); cmd != "" {
-		parts := strings.Fields(cmd)
-		if len(parts) > 0 {
-			c := exec.Command(parts[0], append(parts[1:], msg)...)
-			_ = c.Start()
-			return
-		}
-	}
-
-	if _, err := exec.LookPath("opencode"); err == nil {
-		_ = exec.Command("opencode", "run", "--", msg).Start()
-		return
-	}
-	if _, err := exec.LookPath("claude"); err == nil {
-		_ = exec.Command("claude", "-p", msg).Start()
-		return
-	}
-	if _, err := exec.LookPath("aider"); err == nil {
-		_ = exec.Command("aider", "--message", msg).Start()
-		return
-	}
-	if _, err := exec.LookPath("cursor"); err == nil {
-		_ = exec.Command("cursor", "--command", "workbench.action.chat.open", msg).Start()
-		return
-	}
-	if _, err := exec.LookPath("code"); err == nil {
-		_ = exec.Command("code", "--command", "workbench.action.chat.open", msg).Start()
-		return
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		cmd := exec.Command("pbcopy")
-		stdin, _ := cmd.StdinPipe()
-		if stdin != nil {
-			go func() {
-				_, _ = stdin.Write([]byte(msg))
-				_ = stdin.Close()
-			}()
-		}
-		_ = cmd.Start()
-	case "linux":
-		cmd := exec.Command("xclip", "-selection", "clipboard")
-		stdin, _ := cmd.StdinPipe()
-		if stdin != nil {
-			go func() {
-				_, _ = stdin.Write([]byte(msg))
-				_ = stdin.Close()
-			}()
-		}
-		_ = cmd.Start()
-	case "windows":
-		cmd := exec.Command("clip")
-		stdin, _ := cmd.StdinPipe()
-		if stdin != nil {
-			go func() {
-				_, _ = stdin.Write([]byte(msg))
-				_ = stdin.Close()
-			}()
-		}
-		_ = cmd.Start()
-	}
-}
-
-func (r Row) isMergedLike() bool {
-	return r.Tier == tierMerged
-}
-
-func popupToAgentWaiting(rows []Row) {
-	var sb strings.Builder
-	sb.WriteString("Review these PRs waiting for review. For each, provide review feedback or approve if appropriate.\n\n")
-	for _, r := range rows {
-		if r.Tier == tierWaiting && r.Review != "approved" && !r.isMergedLike() {
-			sb.WriteString("- " + r.Ref + ": " + r.Title + "\n  " + r.URL + "\n\n")
-		}
-	}
-	msg := sb.String()
-	if strings.TrimSpace(msg) == "" {
-		msg = "No PRs waiting for review."
-	}
-	if cmd := os.Getenv("GH_PR_DASH_POPUP_CMD"); cmd != "" {
-		parts := strings.Fields(cmd)
-		if len(parts) > 0 {
-			c := exec.Command(parts[0], append(parts[1:], msg)...)
-			_ = c.Start()
-			return
-		}
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		// Try terminal-notifier style popup? Or use osascript
-		escaped := strings.ReplaceAll(msg, "\"", "\\\"")
-		escaped = strings.ReplaceAll(escaped, "\n", "\\n")
-		script := `display dialog "` + escaped + `" with title "PR Review Request" buttons {"Copy to Agent", "Cancel"} default button "Copy to Agent"`
-		_ = exec.Command("osascript", "-e", script).Start()
-		sendToAgent(msg)
-		return
-	case "linux":
-		_ = exec.Command("zenity", "--info", "--title=PR Review Request", "--text="+msg).Start()
-		sendToAgent(msg)
-		return
-	case "windows":
-		ps := `Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('` + strings.ReplaceAll(msg, "'", "''") + `','PR Review Request')`
-		_ = exec.Command("powershell", "-Command", ps).Start()
-		sendToAgent(msg)
-		return
-	}
-	sendToAgent(msg)
+	return strings.Join(body, "\n") + "\n" + indent(strings.Join(footLines, "\n"), m)
 }
