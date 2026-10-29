@@ -22,6 +22,10 @@ type ghPR struct {
 	Repository       struct{ NameWithOwner string }
 	Comments         struct{ TotalCount int }
 	ReviewRequests   struct{ TotalCount int }
+	MergeQueueEntry  *struct {
+		Position int
+		State    string
+	}
 
 	ReviewThreads struct {
 		Nodes []struct{ IsResolved bool }
@@ -49,7 +53,7 @@ type ghPR struct {
 //	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
 //	status: ci_failed | conflict | comments | ready | building |
-//	        no_reviewer | in_review | draft | merged
+//	        queued | queue_failed | no_reviewer | in_review | draft | merged
 //
 // Status is the single most important reason for the row's tier.
 type Row struct {
@@ -64,6 +68,7 @@ type Row struct {
 	URL        string     `json:"url"`
 	Comments   int        `json:"comments"`
 	Unresolved int        `json:"unresolved_threads"`
+	QueuePos   int        `json:"queue_position,omitempty"`
 	Title      string     `json:"title"`
 	MergedAt   *time.Time `json:"merged_at,omitempty"`
 }
@@ -169,10 +174,23 @@ func hasReviewer(pr ghPR) bool {
 	return false
 }
 
+// queueState is the merge-queue entry state, or "" when the PR isn't queued.
+func queueState(pr ghPR) string {
+	if pr.MergeQueueEntry == nil {
+		return ""
+	}
+	return pr.MergeQueueEntry.State
+}
+
 func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 	switch {
 	case pr.IsDraft:
 		return tierDrafts
+	// A queued PR is out of the user's hands unless the queue rejected it.
+	case queueState(pr) == "UNMERGEABLE":
+		return tierNeedsAction
+	case pr.MergeQueueEntry != nil:
+		return tierBuilding
 	case ci == "fail" || merge == "conflict" || unresolved > 0:
 		return tierNeedsAction
 	case review == "approved" && merge == "clean":
@@ -202,11 +220,14 @@ func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 }
 
 // statusFor picks the one status a row shows. Within needs-action the order
-// is: failed build, then conflict, then unresolved comments.
-func statusFor(tier int, ci, merge string) string {
+// is: rejected by the merge queue, failed build, conflict, then unresolved
+// comments.
+func statusFor(tier int, ci, merge, queue string) string {
 	switch tier {
 	case tierNeedsAction:
 		switch {
+		case queue == "UNMERGEABLE":
+			return "queue_failed"
 		case ci == "fail":
 			return "ci_failed"
 		case merge == "conflict":
@@ -217,6 +238,9 @@ func statusFor(tier int, ci, merge string) string {
 	case tierReady:
 		return "ready"
 	case tierBuilding:
+		if queue != "" {
+			return "queued"
+		}
 		return "building"
 	case tierNoReviewer:
 		return "no_reviewer"
@@ -235,10 +259,15 @@ func classify(pr ghPR, now time.Time) Row {
 	review := reviewCode(pr)
 	unresolved := unresolvedThreads(pr)
 	tier := tierFor(pr, ci, merge, review, unresolved)
+	queuePos := 0
+	if pr.MergeQueueEntry != nil {
+		queuePos = pr.MergeQueueEntry.Position
+	}
 
 	return Row{
 		Tier:       tier,
-		Status:     statusFor(tier, ci, merge),
+		Status:     statusFor(tier, ci, merge, queueState(pr)),
+		QueuePos:   queuePos,
 		Unresolved: unresolved,
 		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:         ci,

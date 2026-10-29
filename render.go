@@ -11,7 +11,7 @@ import (
 var tierNames = []string{
 	"Needs action — CI fail / conflict / comments",
 	"Ready to merge",
-	"Waiting on CI",
+	"Waiting on CI / queue",
 	"Needs reviewer",
 	"Waiting on review",
 	"Drafts",
@@ -114,6 +114,10 @@ func statusEmoji(status string) string {
 		return "🚧"
 	case "comments":
 		return "💬"
+	case "queue_failed":
+		return "🚫"
+	case "queued":
+		return "🚦"
 	case "ready":
 		return "✅"
 	case "building":
@@ -131,9 +135,10 @@ func statusEmoji(status string) string {
 	}
 }
 
-// showStatus reports whether a row carries its own status: only needs-action
-// rows do, since their reason varies while other groups are named by the heading.
-func showStatus(r Row) bool { return r.Tier == tierNeedsAction }
+// showStatus reports whether a row carries its own status: needs-action rows
+// (the reason varies) and queued rows (the position varies). Other groups are
+// named by the heading.
+func showStatus(r Row) bool { return r.Tier == tierNeedsAction || r.Status == "queued" }
 
 func statusText(r Row) string {
 	switch r.Status {
@@ -141,6 +146,10 @@ func statusText(r Row) string {
 		return "CI failed"
 	case "conflict":
 		return "conflict"
+	case "queue_failed":
+		return "queue failed"
+	case "queued":
+		return "queue #" + strconv.Itoa(r.QueuePos)
 	case "comments":
 		if r.Unresolved == 1 {
 			return "1 comment"
@@ -165,7 +174,7 @@ func statusText(r Row) string {
 
 func statusColor(status string, p palette) string {
 	switch status {
-	case "ci_failed", "conflict":
+	case "ci_failed", "conflict", "queue_failed":
 		return p.r
 	case "comments", "building", "no_reviewer":
 		return p.y

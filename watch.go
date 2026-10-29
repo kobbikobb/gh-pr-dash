@@ -59,7 +59,7 @@ const allOpen = -1
 var groups = []group{
 	{"n", "needs", tierNeedsAction, "Please review and take action on PRs that need attention (CI failures, conflicts, unresolved comments):"},
 	{"r", "ready", tierReady, "Please review and merge ready PRs (approved, green, no conflicts):"},
-	{"c", "ci", tierBuilding, "Please monitor PRs waiting on CI:"},
+	{"c", "ci", tierBuilding, "Please monitor PRs waiting on CI or in the merge queue:"},
 	{"u", "unassigned", tierNoReviewer, "Please find reviewers for PRs with no reviewer:"},
 	{"w", "waiting", tierWaiting, "Please review PRs waiting for review:"},
 	{"d", "drafts", tierDrafts, "Please review draft PRs:"},

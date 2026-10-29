@@ -101,6 +101,28 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should show the queue position on queued rows only", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierBuilding, Status: "queued", QueuePos: 3, Repository: "a", Title: "t", URL: "https://x/1"},
+			{Tier: tierBuilding, Status: "building", Repository: "a", Title: "t", URL: "https://x/2"},
+		}
+
+		out := renderTerminal(mixed, 120, false, 0)
+
+		for _, ln := range strings.Split(out, "\n") {
+			switch {
+			case strings.Contains(ln, "https://x/1"):
+				if !strings.HasSuffix(ln, "🚦 queue #3") {
+					t.Errorf("queued row should end with its position: %q", ln)
+				}
+			case strings.Contains(ln, "https://x/2"):
+				if strings.Contains(ln, "queue") {
+					t.Errorf("non-queued row should not mention the queue: %q", ln)
+				}
+			}
+		}
+	})
+
 	t.Run("should end each group heading with its emoji", func(t *testing.T) {
 		out := renderTerminal([]Row{{Tier: tierMerged, Status: "merged", URL: "https://x/1"}}, 120, false, 12)
 

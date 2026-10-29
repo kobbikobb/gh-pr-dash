@@ -21,6 +21,7 @@ const searchQuery = `query($q:String!,$n:Int!){
         repository{ nameWithOwner }
         comments{ totalCount }
         reviewRequests{ totalCount }
+        mergeQueueEntry{ position state }
         reviewThreads(first:50){ nodes{ isResolved } }
         latestReviews(first:20){ nodes{ author{ login } } }
         latestOpinionatedReviews(first:20){ nodes{ state } }
