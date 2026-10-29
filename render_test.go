@@ -79,7 +79,7 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should end every row with one emoji and spell out status only on needs-action rows", func(t *testing.T) {
+	t.Run("should spell out status only on needs-action rows", func(t *testing.T) {
 		mixed := []Row{
 			{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "t", URL: "https://x/1"},
 			{Tier: tierWaiting, Status: "in_review", Repository: "api", Title: "t", URL: "https://x/2"},
@@ -94,18 +94,18 @@ func TestRenderTerminal(t *testing.T) {
 					t.Errorf("needs-action row should end with emoji and label: %q", ln)
 				}
 			case strings.Contains(ln, "https://x/2"):
-				if !strings.HasSuffix(ln, "👀") {
-					t.Errorf("waiting row should end with just its emoji: %q", ln)
+				if strings.Contains(ln, "👀") || strings.HasSuffix(ln, " ") {
+					t.Errorf("waiting row should end at the URL: %q", ln)
 				}
 			}
 		}
 	})
 
-	t.Run("should keep headings free of emoji", func(t *testing.T) {
-		out := renderTerminal([]Row{{Tier: tierNoReviewer, Status: "no_reviewer", URL: "https://x/1"}}, 120, false, 0)
+	t.Run("should end each group heading with its emoji", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierMerged, Status: "merged", URL: "https://x/1"}}, 120, false, 12)
 
-		if !strings.Contains(out, "\nNeeds reviewer (1)\n") && !strings.HasPrefix(out, "Needs reviewer (1)\n") {
-			t.Errorf("heading should be plain text:\n%s", out)
+		if !strings.Contains(out, "Merged today (12) 🎉\n") {
+			t.Errorf("heading should end with emoji:\n%s", out)
 		}
 	})
 
@@ -132,23 +132,23 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should align the trailing emoji column even for URLs of different length", func(t *testing.T) {
+	t.Run("should align needs-action status labels for URLs of different length", func(t *testing.T) {
 		mixed := []Row{
-			{Tier: tierWaiting, Status: "in_review", Repository: "a", Title: "t", URL: "https://x/1"},
-			{Tier: tierWaiting, Status: "in_review", Repository: "a", Title: "t", URL: "https://x/longer/22"},
+			{Tier: tierNeedsAction, Status: "ci_failed", Repository: "a", Title: "t", URL: "https://x/1"},
+			{Tier: tierNeedsAction, Status: "conflict", Repository: "a", Title: "t", URL: "https://x/longer/22"},
 		}
 
 		out := renderTerminal(mixed, 120, false, 0)
 
 		col := -1
 		for _, ln := range strings.Split(out, "\n") {
-			i := strings.Index(ln, "👀")
+			i := strings.IndexAny(ln, "🔴🚧")
 			if i < 0 {
 				continue
 			}
 			w := runewidth.StringWidth(ln[:i])
 			if col != -1 && w != col {
-				t.Errorf("emoji column at %d, want %d in %q", w, col, ln)
+				t.Errorf("status column at %d, want %d in %q", w, col, ln)
 			}
 			col = w
 		}
