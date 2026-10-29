@@ -101,24 +101,33 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should show the queue position on queued rows only", func(t *testing.T) {
+	t.Run("should show the queue position right after the CI glyph on queued rows only", func(t *testing.T) {
 		mixed := []Row{
-			{Tier: tierBuilding, Status: "queued", QueuePos: 3, Repository: "a", Title: "t", URL: "https://x/1"},
-			{Tier: tierBuilding, Status: "building", Repository: "a", Title: "t", URL: "https://x/2"},
+			{Tier: tierBuilding, Status: "queued", QueuePos: 3, CI: "ok", Repository: "a", Title: "t", URL: "https://x/1"},
+			{Tier: tierBuilding, Status: "building", CI: "pending", Repository: "a", Title: "t", URL: "https://x/2"},
 		}
 
 		out := renderTerminal(mixed, 120, false, 0)
 
+		col := -1
 		for _, ln := range strings.Split(out, "\n") {
 			switch {
 			case strings.Contains(ln, "https://x/1"):
-				if !strings.HasSuffix(ln, "🚦 queue #3") {
-					t.Errorf("queued row should end with its position: %q", ln)
+				if !strings.Contains(ln, "✓  🚦 #3  ") || strings.HasSuffix(ln, "#3") {
+					t.Errorf("queue marker should follow the CI glyph: %q", ln)
 				}
 			case strings.Contains(ln, "https://x/2"):
-				if strings.Contains(ln, "queue") {
+				if strings.Contains(ln, "🚦") {
 					t.Errorf("non-queued row should not mention the queue: %q", ln)
 				}
+			}
+			if strings.Contains(ln, "https://x/") {
+				i := strings.Index(ln, "0d")
+				w := runewidth.StringWidth(ln[:i])
+				if col != -1 && w != col {
+					t.Errorf("idle column at %d, want %d in %q", w, col, ln)
+				}
+				col = w
 			}
 		}
 	})

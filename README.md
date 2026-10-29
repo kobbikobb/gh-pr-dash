@@ -74,7 +74,7 @@ Seven tiers, most-stale-first within each:
 |---|---|---|
 | **Needs action** | 🔴 🚧 💬 | merge queue rejected it, CI failing, merge conflict, or unresolved review threads (in that priority) |
 | **Ready to merge** | ✅ | approved (no review still required), CI green, no conflicts, not blocked by GitHub |
-| **Waiting on CI / queue** | ⏳ | approved but CI still running, or in the merge queue (row shows `🚦 queue #N`) |
+| **Waiting on CI / queue** | ⏳ | approved but CI still running, or in the merge queue (row shows `🚦 #N` after the CI glyph) |
 | **Needs reviewer** | 🙋 | nobody asked to review or has reviewed |
 | **Waiting on review** | 👀 | everything else that's open |
 | **Drafts** | 📝 | draft PRs |

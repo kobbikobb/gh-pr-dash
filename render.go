@@ -135,10 +135,18 @@ func statusEmoji(status string) string {
 	}
 }
 
-// showStatus reports whether a row carries its own status: needs-action rows
-// (the reason varies) and queued rows (the position varies). Other groups are
-// named by the heading.
-func showStatus(r Row) bool { return r.Tier == tierNeedsAction || r.Status == "queued" }
+// showStatus reports whether a row ends with its own status: only needs-action
+// rows do, since their reason varies while other groups are named by the
+// heading.
+func showStatus(r Row) bool { return r.Tier == tierNeedsAction }
+
+// queueCell sits right after the CI glyph; the position varies per row.
+func queueCell(r Row) string {
+	if r.Status != "queued" {
+		return ""
+	}
+	return statusEmoji("queued") + " #" + strconv.Itoa(r.QueuePos)
+}
 
 func statusText(r Row) string {
 	switch r.Status {
@@ -148,8 +156,6 @@ func statusText(r Row) string {
 		return "conflict"
 	case "queue_failed":
 		return "queue failed"
-	case "queued":
-		return "queue #" + strconv.Itoa(r.QueuePos)
 	case "comments":
 		if r.Unresolved == 1 {
 			return "1 comment"
@@ -176,7 +182,7 @@ func statusColor(status string, p palette) string {
 	switch status {
 	case "ci_failed", "conflict", "queue_failed":
 		return p.r
-	case "comments", "building", "no_reviewer":
+	case "comments", "building", "queued", "no_reviewer":
 		return p.y
 	case "ready":
 		return p.g
@@ -236,11 +242,12 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
 	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
-	longest, urlW, longestRepo, statusW := 0, 0, 0, 0
+	longest, urlW, longestRepo, statusW, queueW := 0, 0, 0, 0, 0
 	for _, r := range rows {
 		longest = max(longest, runewidth.StringWidth(r.Title))
 		urlW = max(urlW, runewidth.StringWidth(r.URL))
 		longestRepo = max(longestRepo, runewidth.StringWidth(r.Repository))
+		queueW = max(queueW, runewidth.StringWidth(queueCell(r)))
 		if showStatus(r) {
 			statusW = max(statusW, runewidth.StringWidth(statusText(r)))
 		}
@@ -252,7 +259,12 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		trailW = 2 + emojiW + 1 + statusW
 		urlPad = urlW
 	}
-	prefixW := 1 + numW + 2 + 1 + 2 + idleW + 2
+	// The queue column exists only when some row is queued.
+	queueCol := 0
+	if queueW > 0 {
+		queueCol = queueW + 2
+	}
+	prefixW := 1 + numW + 2 + 1 + 2 + queueCol + idleW + 2
 	repoW := longestRepo
 	titleW := width - prefixW - 2 - 3 - urlW - repoW - trailW
 	if titleW > longest {
@@ -288,6 +300,10 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
 		title := padRight(truncate(r.Title, titleW), titleW)
+		queue := ""
+		if queueCol > 0 {
+			queue = statusColor("queued", p) + padRight(queueCell(r), queueW) + p.z + "  "
+		}
 		status := ""
 		if showStatus(r) {
 			status = "  " + padRight(statusEmoji(r.Status), emojiW) + " " + statusColor(r.Status, p) + statusText(r) + p.z
@@ -296,8 +312,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + padRight(r.URL, urlPad) + p.z
 
-		fmt.Fprintf(&b, " %s  %s  %s  %s  %s   %s%s\n",
-			num, ciGlyph(r.CI, p), idle, repo, title, url, status)
+		fmt.Fprintf(&b, " %s  %s  %s%s  %s  %s   %s%s\n",
+			num, ciGlyph(r.CI, p), queue, idle, repo, title, url, status)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
