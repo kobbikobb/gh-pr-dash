@@ -19,15 +19,15 @@ No LLM, no config, no state — deterministic, and ships as one precompiled bina
 
 ```
 Needs action — CI fail / conflict / comments (3) 🚨
- 1.  2d  api  Fix token refresh   https://github.com/me/api/pull/1008   🔴 CI failed
- 2.  1d  api  Retry on 502        https://github.com/me/api/pull/1010   🚧 conflict
- 3.  4h  web  Add dark mode       https://github.com/me/web/pull/98     💬 3 comments
+ 1.  ✗  2d  api  Fix token refresh   https://github.com/me/api/pull/1008   🔴 CI failed
+ 2.  ✓  1d  api  Retry on 502        https://github.com/me/api/pull/1010   🚧 conflict
+ 3.  ✓  4h  web  Add dark mode       https://github.com/me/web/pull/98     💬 3 comments
 
 Ready to merge (1) ✅
- 4.  3h  api  Validate config     https://github.com/me/api/pull/12385
+ 4.  ✓  3h  api  Validate config     https://github.com/me/api/pull/12385
 ```
 
-Each group heading ends with its emoji. **Needs action** rows also end with the reason (failed build, then conflict, then unresolved review comments); other rows don't repeat what the heading says. Rows start with **idle** days (or the merge time for merged rows), then repo, title and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Every row starts with its **CI** glyph (`✓` pass, `✗` fail, `•` pending, `·` none), then **idle** days (or the merge time for merged rows), repo, title and the full PR URL — plain text so it stays cmd-clickable, even through tmux. Each group heading ends with its emoji. **Needs action** rows also end with the reason (failed build, then conflict, then unresolved review comments); other rows don't repeat what the heading says.
 
 ## Install
 

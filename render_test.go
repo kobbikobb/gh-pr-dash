@@ -154,6 +154,17 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should show a CI glyph on every row", func(t *testing.T) {
+		cases := []struct{ ci, glyph string }{{"ok", "✓"}, {"fail", "✗"}, {"pending", "•"}, {"none", "·"}}
+		for _, c := range cases {
+			out := renderTerminal([]Row{{Tier: tierWaiting, CI: c.ci, Repository: "api", URL: "https://x/1"}}, 120, false, 0)
+
+			if !strings.Contains(out, " "+c.glyph+"  ") {
+				t.Errorf("ci %q: missing glyph %q:\n%s", c.ci, c.glyph, out)
+			}
+		}
+	})
+
 	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
 		out := renderTerminal(rows, 200, false, 0)
 

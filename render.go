@@ -86,6 +86,20 @@ func indent(s string, n int) string {
 // tierEmoji ends each group heading, indexed by tier.
 var tierEmoji = []string{"🚨", "✅", "⏳", "🙋", "👀", "📝", "🎉"}
 
+// ciGlyph is one cell wide, so it never disturbs column alignment.
+func ciGlyph(code string, p palette) string {
+	switch code {
+	case "ok":
+		return p.g + "✓" + p.z
+	case "fail":
+		return p.r + "✗" + p.z
+	case "pending":
+		return p.y + "•" + p.z
+	default:
+		return p.d + "·" + p.z
+	}
+}
+
 // emojiW is the display width of the trailing status emoji. Every emoji used
 // below is two cells wide without a variation selector, so terminals agree.
 const emojiW = 2
@@ -229,7 +243,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		trailW = 2 + emojiW + 1 + statusW
 		urlPad = urlW
 	}
-	prefixW := 1 + numW + 2 + idleW + 2
+	prefixW := 1 + numW + 2 + 1 + 2 + idleW + 2
 	repoW := longestRepo
 	titleW := width - prefixW - 2 - 3 - urlW - repoW - trailW
 	if titleW > longest {
@@ -273,8 +287,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + padRight(r.URL, urlPad) + p.z
 
-		fmt.Fprintf(&b, " %s  %s  %s  %s   %s%s\n",
-			num, idle, repo, title, url, status)
+		fmt.Fprintf(&b, " %s  %s  %s  %s  %s   %s%s\n",
+			num, ciGlyph(r.CI, p), idle, repo, title, url, status)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
