@@ -83,15 +83,11 @@ func indent(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-// tierEmoji heads each group so rows need not repeat what the heading says.
-var tierEmoji = []string{"🚨", "✅", "⏳", "🙋", "👀", "📝", "🎉"}
-
-// emojiW is the display width of the status emoji column. Every emoji used
+// emojiW is the display width of the trailing status emoji. Every emoji used
 // below is two cells wide without a variation selector, so terminals agree.
 const emojiW = 2
 
-// statusEmoji is the one emoji a row shows, chosen by its status code. Only
-// needs-action rows show it: their reason varies, unlike every other group.
+// statusEmoji is the one emoji a row ends with, chosen by its status code.
 func statusEmoji(status string) string {
 	switch status {
 	case "ci_failed":
@@ -117,7 +113,9 @@ func statusEmoji(status string) string {
 	}
 }
 
-func showStatus(r Row) bool { return r.Tier == tierNeedsAction }
+// showStatusText reports whether a row spells out its status: only needs-action
+// rows do, since their reason varies while other groups are named by the heading.
+func showStatusText(r Row) bool { return r.Tier == tierNeedsAction }
 
 func statusText(r Row) string {
 	switch r.Status {
@@ -216,18 +214,18 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		longest = max(longest, runewidth.StringWidth(r.Title))
 		urlW = max(urlW, runewidth.StringWidth(r.URL))
 		longestRepo = max(longestRepo, runewidth.StringWidth(r.Repository))
-		if showStatus(r) {
+		if showStatusText(r) {
 			statusW = max(statusW, runewidth.StringWidth(statusText(r)))
 		}
 	}
-	// The status column exists only when some row shows it.
-	statusCol := 0
+	// The status trails each row: emoji, plus a label on needs-action rows.
+	trailW := 2 + emojiW
 	if statusW > 0 {
-		statusCol = emojiW + 1 + statusW + 2
+		trailW += 1 + statusW
 	}
-	prefixW := 1 + numW + 2 + statusCol + idleW + 2
+	prefixW := 1 + numW + 2 + idleW + 2
 	repoW := longestRepo
-	titleW := width - prefixW - 2 - 3 - urlW - repoW
+	titleW := width - prefixW - 2 - 3 - urlW - repoW - trailW
 	if titleW > longest {
 		titleW = longest
 	}
@@ -250,7 +248,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 				if tier == tierMerged {
 					count = mergedShown
 				}
-				name = fmt.Sprintf("%s %s (%d)", tierEmoji[tier], tierNames[tier], count)
+				name = fmt.Sprintf("%s (%d)", tierNames[tier], count)
 			}
 			color := p.d
 			if tier >= 0 && tier < len(headColor) {
@@ -261,21 +259,16 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
 		title := padRight(truncate(r.Title, titleW), titleW)
-		status := ""
-		if statusCol > 0 {
-			emoji, text := "", ""
-			if showStatus(r) {
-				emoji, text = statusEmoji(r.Status), statusText(r)
-			}
-			status = padRight(emoji, emojiW) + " " +
-				statusColor(r.Status, p) + padRight(text, statusW) + p.z + "  "
+		status := statusEmoji(r.Status)
+		if showStatusText(r) {
+			status = padRight(status, emojiW) + " " + statusColor(r.Status, p) + statusText(r) + p.z
 		}
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
-		url := p.d + r.URL + p.z
+		url := p.d + padRight(r.URL, urlW) + p.z
 
-		fmt.Fprintf(&b, " %s  %s%s  %s  %s   %s\n",
-			num, status, idle, repo, title, url)
+		fmt.Fprintf(&b, " %s  %s  %s  %s   %s  %s\n",
+			num, idle, repo, title, url, status)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)

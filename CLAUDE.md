@@ -27,7 +27,7 @@ Flat `package main`, one concern per file. Pipeline: **fetch → classify/rank �
 
 - `main.go` — arg parsing (`parseArgs`), dispatch to watch loop or one-shot `fetchAndRender`.
 - `dash.go` — GitHub GraphQL query + `fetchPRs`; `detectTerminal` (width + `NO_COLOR`/TTY color detection); `fetchAndRender` orchestrates fetch→build→render for both JSON and terminal output.
-- `pr.go` — the core logic. `ghPR` (raw GraphQL shape) → `Row` (ranked, render-ready). `buildRows` filters by org and sorts. **Ranking = 7 tiers** (`tierNeedsAction` < `tierReady` < `tierBuilding` < `tierNoReviewer` < `tierWaiting` < `tierDrafts` < `tierMerged`), most-idle-first within each tier. Each `Row` also has a single `Status` code (`statusFor`) — the one reason shown as the row's emoji (needs-action rows only; other groups put their emoji in the heading, `tierEmoji`).
+- `pr.go` — the core logic. `ghPR` (raw GraphQL shape) → `Row` (ranked, render-ready). `buildRows` filters by org and sorts. **Ranking = 7 tiers** (`tierNeedsAction` < `tierReady` < `tierBuilding` < `tierNoReviewer` < `tierWaiting` < `tierDrafts` < `tierMerged`), most-idle-first within each tier. Each `Row` also has a single `Status` code (`statusFor`) — the one reason shown as the emoji at the end of the row (needs-action rows also show a text label).
 - `render.go` — terminal table rendering. Status stored as stable codes (ci: ok/fail/pending/none, merge: clean/conflict/unknown, review: approved/changes/review/none), styled here.
 - `header.go` — ASCII-art box header, static and animated (watch) variants.
 - `watch.go` — `--watch` Bubble Tea model: single `Update` loop, 1-min data ticker + 200ms animation ticker, action-then-target key flow (fetch results are held while the user is mid-action).

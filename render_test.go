@@ -79,7 +79,7 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should show a status emoji only on needs-action rows", func(t *testing.T) {
+	t.Run("should end every row with one emoji and spell out status only on needs-action rows", func(t *testing.T) {
 		mixed := []Row{
 			{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "t", URL: "https://x/1"},
 			{Tier: tierWaiting, Status: "in_review", Repository: "api", Title: "t", URL: "https://x/2"},
@@ -90,30 +90,22 @@ func TestRenderTerminal(t *testing.T) {
 		for _, ln := range strings.Split(out, "\n") {
 			switch {
 			case strings.Contains(ln, "https://x/1"):
-				if !strings.Contains(ln, "🔴") || !strings.Contains(ln, "CI failed") {
-					t.Errorf("needs-action row missing status: %q", ln)
+				if !strings.HasSuffix(ln, "🔴 CI failed") {
+					t.Errorf("needs-action row should end with emoji and label: %q", ln)
 				}
 			case strings.Contains(ln, "https://x/2"):
-				if strings.Contains(ln, "👀") || strings.Contains(ln, "in review") {
-					t.Errorf("waiting row should not repeat its heading: %q", ln)
+				if !strings.HasSuffix(ln, "👀") {
+					t.Errorf("waiting row should end with just its emoji: %q", ln)
 				}
 			}
 		}
 	})
 
-	t.Run("should put each tier's emoji in its heading", func(t *testing.T) {
+	t.Run("should keep headings free of emoji", func(t *testing.T) {
 		out := renderTerminal([]Row{{Tier: tierNoReviewer, Status: "no_reviewer", URL: "https://x/1"}}, 120, false, 0)
 
-		if !strings.Contains(out, "🙋 Needs reviewer (1)") {
-			t.Errorf("heading missing emoji:\n%s", out)
-		}
-	})
-
-	t.Run("should omit the status column when no row needs action", func(t *testing.T) {
-		out := renderTerminal([]Row{{Tier: tierDrafts, Status: "draft", Repository: "api", URL: "https://x/1"}}, 120, false, 0)
-
-		if strings.Contains(out, "draft  ") || strings.Contains(out, "📝 draft") {
-			t.Errorf("unexpected status text:\n%s", out)
+		if !strings.Contains(out, "\nNeeds reviewer (1)\n") && !strings.HasPrefix(out, "Needs reviewer (1)\n") {
+			t.Errorf("heading should be plain text:\n%s", out)
 		}
 	})
 
@@ -135,6 +127,28 @@ func TestRenderTerminal(t *testing.T) {
 			w := runewidth.StringWidth(ln[:i])
 			if col != -1 && w != col {
 				t.Errorf("URL column at %d, want %d in %q", w, col, ln)
+			}
+			col = w
+		}
+	})
+
+	t.Run("should align the trailing emoji column even for URLs of different length", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierWaiting, Status: "in_review", Repository: "a", Title: "t", URL: "https://x/1"},
+			{Tier: tierWaiting, Status: "in_review", Repository: "a", Title: "t", URL: "https://x/longer/22"},
+		}
+
+		out := renderTerminal(mixed, 120, false, 0)
+
+		col := -1
+		for _, ln := range strings.Split(out, "\n") {
+			i := strings.Index(ln, "👀")
+			if i < 0 {
+				continue
+			}
+			w := runewidth.StringWidth(ln[:i])
+			if col != -1 && w != col {
+				t.Errorf("emoji column at %d, want %d in %q", w, col, ln)
 			}
 			col = w
 		}
