@@ -73,7 +73,7 @@ Seven tiers, most-stale-first within each:
 | Tier | Emoji | Meaning |
 |---|---|---|
 | **Needs action** | 🔴 🚧 💬 | CI failing, merge conflict, or unresolved review threads (in that priority) |
-| **Ready to merge** | ✅ | approved, CI green, no conflicts |
+| **Ready to merge** | ✅ | approved (no review still required), CI green, no conflicts, not blocked by GitHub |
 | **Waiting on CI** | ⏳ | approved but CI still running |
 | **Needs reviewer** | 🙋 | nobody asked to review or has reviewed |
 | **Waiting on review** | 👀 | everything else that's open |
