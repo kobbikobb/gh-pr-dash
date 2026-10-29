@@ -167,10 +167,58 @@ func TestTierFor(t *testing.T) {
 	})
 
 	t.Run("should rank review-required as waiting", func(t *testing.T) {
-		pr := prWith(func(p *ghPR) { p.ReviewDecision = "REVIEW_REQUIRED"; setRollup(p, "SUCCESS") })
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "REVIEW_REQUIRED"
+			p.ReviewRequests.TotalCount = 1
+			setRollup(p, "SUCCESS")
+		})
 
 		if classify(pr, time.Now()).Tier != tierWaiting {
 			t.Error("want waiting")
+		}
+	})
+
+	t.Run("should rank a PR nobody was asked to review as needs-reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { setRollup(p, "SUCCESS") })
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("want needs-reviewer")
+		}
+	})
+
+	t.Run("should not count the author's own review replies as a reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.Author.Login = "me"
+			p.LatestReviews.Nodes = []struct{ Author struct{ Login string } }{{Author: struct{ Login string }{"me"}}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("author's own review must not count as a reviewer")
+		}
+	})
+
+	t.Run("should rank unresolved review threads as needs-action", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			setRollup(p, "SUCCESS")
+			p.ReviewThreads.Nodes = []struct{ IsResolved bool }{{IsResolved: true}, {IsResolved: false}}
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierNeedsAction || row.Unresolved != 1 {
+			t.Errorf("tier = %d, unresolved = %d; want needs-action, 1", row.Tier, row.Unresolved)
+		}
+	})
+
+	t.Run("should keep drafts in drafts despite unresolved threads", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.IsDraft = true
+			p.ReviewThreads.Nodes = []struct{ IsResolved bool }{{IsResolved: false}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierDrafts {
+			t.Error("want drafts")
 		}
 	})
 
@@ -347,4 +395,29 @@ func TestFilterRows(t *testing.T) {
 			t.Errorf("got %+v, want nil", got)
 		}
 	})
+}
+
+func TestStatusFor(t *testing.T) {
+	cases := []struct {
+		name      string
+		tier      int
+		ci, merge string
+		want      string
+	}{
+		{"failed build beats conflict", tierNeedsAction, "fail", "conflict", "ci_failed"},
+		{"conflict beats comments", tierNeedsAction, "ok", "conflict", "conflict"},
+		{"comments when nothing else blocks", tierNeedsAction, "ok", "clean", "comments"},
+		{"ready", tierReady, "ok", "clean", "ready"},
+		{"building", tierBuilding, "pending", "clean", "building"},
+		{"no reviewer", tierNoReviewer, "ok", "clean", "no_reviewer"},
+		{"in review", tierWaiting, "ok", "clean", "in_review"},
+		{"draft", tierDrafts, "fail", "conflict", "draft"},
+	}
+	for _, c := range cases {
+		t.Run("should pick "+c.name, func(t *testing.T) {
+			if got := statusFor(c.tier, c.ci, c.merge); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
 }

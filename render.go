@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
 var tierNames = []string{
-	"Needs action — CI fail / conflict",
+	"Needs action — CI fail / conflict / comments",
 	"Ready to merge",
 	"Waiting on CI",
+	"Needs reviewer",
 	"Waiting on review",
 	"Drafts",
 	"Merged today",
@@ -30,28 +33,28 @@ func colors(on bool) palette {
 	}
 }
 
-// truncate and the pad helpers count runes, not bytes, so multibyte titles
-// never get sliced mid-character.
+// truncate and the pad helpers count display cells, not bytes or runes, so
+// multibyte titles are never sliced mid-character and wide characters (emoji,
+// CJK) keep columns aligned.
 func truncate(s string, w int) string {
-	r := []rune(s)
-	if len(r) <= w {
+	if runewidth.StringWidth(s) <= w {
 		return s
 	}
 	if w <= 1 {
-		return string(r[:max(w, 0)])
+		return runewidth.Truncate(s, max(w, 0), "")
 	}
-	return string(r[:w-1]) + "…"
+	return runewidth.Truncate(s, w, "…")
 }
 
 func padRight(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - runewidth.StringWidth(s); n > 0 {
 		return s + strings.Repeat(" ", n)
 	}
 	return s
 }
 
 func padLeft(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - runewidth.StringWidth(s); n > 0 {
 		return strings.Repeat(" ", n) + s
 	}
 	return s
@@ -80,25 +83,72 @@ func indent(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func ciGlyph(code string, p palette) string {
-	switch code {
-	case "ok":
-		return p.g + "✓" + p.z
-	case "fail":
-		return p.r + "✗" + p.z
-	case "pending":
-		return p.y + "•" + p.z
+// emojiW is the display width of the status emoji column. Every emoji used
+// below is two cells wide without a variation selector, so terminals agree.
+const emojiW = 2
+
+// statusEmoji is the one emoji a row shows, chosen by its status code.
+func statusEmoji(status string) string {
+	switch status {
+	case "ci_failed":
+		return "🔴"
+	case "conflict":
+		return "🚧"
+	case "comments":
+		return "💬"
+	case "ready":
+		return "✅"
+	case "building":
+		return "⏳"
+	case "no_reviewer":
+		return "🙋"
+	case "in_review":
+		return "👀"
+	case "draft":
+		return "📝"
+	case "merged":
+		return "🎉"
 	default:
-		return p.d + "·" + p.z
+		return ""
 	}
 }
 
-func mergeColor(code string, p palette) string {
-	switch code {
+func statusText(r Row) string {
+	switch r.Status {
+	case "ci_failed":
+		return "CI failed"
 	case "conflict":
+		return "conflict"
+	case "comments":
+		if r.Unresolved == 1 {
+			return "1 comment"
+		}
+		return strconv.Itoa(r.Unresolved) + " comments"
+	case "ready":
+		return "ready"
+	case "building":
+		return "CI running"
+	case "no_reviewer":
+		return "no reviewer"
+	case "in_review":
+		return "in review"
+	case "draft":
+		return "draft"
+	case "merged":
+		return "merged"
+	default:
+		return ""
+	}
+}
+
+func statusColor(status string, p palette) string {
+	switch status {
+	case "ci_failed", "conflict":
 		return p.r
-	case "unknown":
+	case "comments", "building", "no_reviewer":
 		return p.y
+	case "ready":
+		return p.g
 	case "merged":
 		return p.c
 	default:
@@ -155,25 +205,14 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
 	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
-	prefixW := 1 + numW + 2 + 1 + 2 + 8 + 2 + idleW + 2
-	longest, urlW, longestRepo := 0, 0, 0
-	titles := make([]string, len(rows))
-	for i, r := range rows {
-		t := r.Title
-		if r.Comments > 0 {
-			t += " (" + strconv.Itoa(r.Comments) + ")"
-		}
-		titles[i] = t
-		if n := len([]rune(t)); n > longest {
-			longest = n
-		}
-		if n := len([]rune(r.URL)); n > urlW {
-			urlW = n
-		}
-		if n := len([]rune(r.Repository)); n > longestRepo {
-			longestRepo = n
-		}
+	longest, urlW, longestRepo, statusW := 0, 0, 0, 0
+	for _, r := range rows {
+		longest = max(longest, runewidth.StringWidth(r.Title))
+		urlW = max(urlW, runewidth.StringWidth(r.URL))
+		longestRepo = max(longestRepo, runewidth.StringWidth(r.Repository))
+		statusW = max(statusW, runewidth.StringWidth(statusText(r)))
 	}
+	prefixW := 1 + numW + 2 + emojiW + 2 + statusW + 2 + idleW + 2
 	repoW := longestRepo
 	titleW := width - prefixW - 2 - 3 - urlW - repoW
 	if titleW > longest {
@@ -183,7 +222,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
+	headColor := []string{p.r, p.g, p.y, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {
@@ -208,16 +247,17 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		}
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
-		title := padRight(truncate(titles[i], titleW), titleW)
-		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
+		title := padRight(truncate(r.Title, titleW), titleW)
+		emoji := padRight(statusEmoji(r.Status), emojiW)
+		detail := statusColor(r.Status, p) + padRight(statusText(r), statusW) + p.z
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
 		fmt.Fprintf(&b, " %s  %s  %s  %s  %s  %s   %s\n",
-			num, ciGlyph(r.CI, p), merge, idle, repo, title, url)
+			num, emoji, detail, idle, repo, title, url)
 	}
-	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
-		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], mergedShown, p.z)
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
 	return b.String()
 }

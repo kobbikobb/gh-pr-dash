@@ -18,8 +18,17 @@ type ghPR struct {
 	MergedAt         time.Time
 	Mergeable        string
 	MergeStateStatus string
+	Author           struct{ Login string }
 	Repository       struct{ NameWithOwner string }
 	Comments         struct{ TotalCount int }
+	ReviewRequests   struct{ TotalCount int }
+
+	ReviewThreads struct {
+		Nodes []struct{ IsResolved bool }
+	}
+	LatestReviews struct {
+		Nodes []struct{ Author struct{ Login string } }
+	}
 
 	LatestOpinionatedReviews struct {
 		Nodes []struct{ State string }
@@ -39,16 +48,22 @@ type ghPR struct {
 //	ci:     ok | fail | pending | none
 //	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
+//	status: ci_failed | conflict | comments | ready | building |
+//	        no_reviewer | in_review | draft | merged
+//
+// Status is the single most important reason for the row's tier.
 type Row struct {
 	Tier       int        `json:"tier"`
 	IdleDays   int        `json:"idle_days"`
 	CI         string     `json:"ci"`
 	Merge      string     `json:"merge"`
 	Review     string     `json:"review"`
+	Status     string     `json:"status"`
 	Ref        string     `json:"pr"`
 	Repository string     `json:"repo"`
 	URL        string     `json:"url"`
 	Comments   int        `json:"comments"`
+	Unresolved int        `json:"unresolved_threads"`
 	Title      string     `json:"title"`
 	MergedAt   *time.Time `json:"merged_at,omitempty"`
 }
@@ -58,6 +73,7 @@ const (
 	tierNeedsAction = iota
 	tierReady
 	tierBuilding
+	tierNoReviewer
 	tierWaiting
 	tierDrafts
 	tierMerged
@@ -125,11 +141,37 @@ func rollupState(pr ghPR) string {
 	return ""
 }
 
-func tierFor(pr ghPR, ci, merge, review string) int {
+// unresolvedThreads counts review threads nobody has resolved yet.
+func unresolvedThreads(pr ghPR) int {
+	n := 0
+	for _, t := range pr.ReviewThreads.Nodes {
+		if !t.IsResolved {
+			n++
+		}
+	}
+	return n
+}
+
+// hasReviewer reports whether anyone other than the author was asked to
+// review or has reviewed. The author's own replies create COMMENTED reviews,
+// so they must not count.
+func hasReviewer(pr ghPR) bool {
+	if pr.ReviewRequests.TotalCount > 0 {
+		return true
+	}
+	for _, r := range pr.LatestReviews.Nodes {
+		if r.Author.Login != pr.Author.Login {
+			return true
+		}
+	}
+	return false
+}
+
+func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 	switch {
 	case pr.IsDraft:
 		return tierDrafts
-	case ci == "fail" || merge == "conflict":
+	case ci == "fail" || merge == "conflict" || unresolved > 0:
 		return tierNeedsAction
 	case review == "approved" && merge == "clean":
 		switch ci {
@@ -145,8 +187,38 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 			}
 			return tierBuilding
 		}
+	case !hasReviewer(pr):
+		return tierNoReviewer
 	default:
 		return tierWaiting
+	}
+}
+
+// statusFor picks the one status a row shows. Within needs-action the order
+// is: failed build, then conflict, then unresolved comments.
+func statusFor(tier int, ci, merge string) string {
+	switch tier {
+	case tierNeedsAction:
+		switch {
+		case ci == "fail":
+			return "ci_failed"
+		case merge == "conflict":
+			return "conflict"
+		default:
+			return "comments"
+		}
+	case tierReady:
+		return "ready"
+	case tierBuilding:
+		return "building"
+	case tierNoReviewer:
+		return "no_reviewer"
+	case tierWaiting:
+		return "in_review"
+	case tierDrafts:
+		return "draft"
+	default:
+		return "merged"
 	}
 }
 
@@ -154,9 +226,13 @@ func classify(pr ghPR, now time.Time) Row {
 	ci := ciCode(rollupState(pr))
 	merge := mergeCode(pr.Mergeable)
 	review := reviewCode(pr)
+	unresolved := unresolvedThreads(pr)
+	tier := tierFor(pr, ci, merge, review, unresolved)
 
 	return Row{
-		Tier:       tierFor(pr, ci, merge, review),
+		Tier:       tier,
+		Status:     statusFor(tier, ci, merge),
+		Unresolved: unresolved,
 		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:         ci,
 		Merge:      merge,
@@ -208,6 +284,7 @@ func classifyMerged(pr ghPR, now time.Time) Row {
 		CI:         "none",
 		Merge:      "merged",
 		Review:     "none",
+		Status:     "merged",
 		Ref:        shortRef(pr),
 		Repository: repoFromRef(shortRef(pr)),
 		URL:        pr.URL,

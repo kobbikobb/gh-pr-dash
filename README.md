@@ -18,15 +18,16 @@
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
 ```
-Needs action — CI fail / conflict (2)
-  ✗ clean    conflict     1d api   extract idle watchdog into run-watchdog    https://github.com/me/api/pull/1008
-  ✗ clean    clean        2d api   map user_id from transactions to goaml (1) https://github.com/me/api/pull/12442
+Needs action — CI fail / conflict / comments (3)
+ 1.  🔴  CI failed     2d  api  Fix token refresh        https://github.com/me/api/pull/1008
+ 2.  🚧  conflict      1d  api  Retry on 502             https://github.com/me/api/pull/1010
+ 3.  💬  3 comments    4h  web  Add dark mode            https://github.com/me/web/pull/98
 
 Ready to merge (1)
-  ✓ clean    clean        2d api   Validate regulator config on save (1)       https://github.com/me/api/pull/12385
+ 4.  ✅  ready         3h  api  Validate regulator config https://github.com/me/api/pull/12385
 ```
 
-Each row: **CI** (`✓` pass `✗` fail `•` pending), **merge** state, **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Each row shows **one** status emoji and a short label — the most important reason the PR is in its group (failed build, then conflict, then unresolved review comments). Then **idle** days (or the merge time for merged rows), repo, title, and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
 
 ## Install
 
@@ -58,7 +59,7 @@ Pick an action, then a target. Nothing happens on a bare number.
 | `s` | Slack — not implemented |
 | `q` | quit |
 
-Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI, `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
+Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI, `u` unassigned (no reviewer), `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
 
 Environment:
 
@@ -67,16 +68,17 @@ Environment:
 
 ## Ranking
 
-Six tiers, most-stale-first within each:
+Seven tiers, most-stale-first within each:
 
-| Tier | Meaning |
-|---|---|
-| **Needs action** | CI failing or merge conflict |
-| **Ready to merge** | approved, CI green, no conflicts |
-| **Waiting on CI** | approved but CI still running |
-| **Waiting on review** | everything else that's open |
-| **Drafts** | draft PRs |
-| **Merged today** | merged since midnight (up to 10 listed, count shows the real total) |
+| Tier | Emoji | Meaning |
+|---|---|---|
+| **Needs action** | 🔴 🚧 💬 | CI failing, merge conflict, or unresolved review threads (in that priority) |
+| **Ready to merge** | ✅ | approved, CI green, no conflicts |
+| **Waiting on CI** | ⏳ | approved but CI still running |
+| **Needs reviewer** | 🙋 | nobody asked to review or has reviewed |
+| **Waiting on review** | 👀 | everything else that's open |
+| **Drafts** | 📝 | draft PRs |
+| **Merged today** | 🎉 | merged since midnight (up to 10 listed, count shows the real total) |
 
 Review status honors a standing approval or changes-request as well as `reviewDecision`, which is empty in repos that don't *require* review.
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestTruncate(t *testing.T) {
@@ -15,6 +17,14 @@ func TestTruncate(t *testing.T) {
 		}
 		if strings.ContainsRune(got, '�') {
 			t.Errorf("got replacement char in %q", got)
+		}
+	})
+
+	t.Run("should truncate by display width so wide characters fit", func(t *testing.T) {
+		got := truncate("🎉🎉🎉🎉", 5)
+
+		if w := runewidth.StringWidth(got); w > 5 {
+			t.Errorf("width = %d, want <= 5 (%q)", w, got)
 		}
 	})
 
@@ -32,6 +42,12 @@ func TestPad(t *testing.T) {
 		}
 	})
 
+	t.Run("should pad emoji by display width", func(t *testing.T) {
+		if got := padRight("🎉", 4); runewidth.StringWidth(got) != 4 {
+			t.Errorf("padRight width = %d, want 4", runewidth.StringWidth(got))
+		}
+	})
+
 	t.Run("should right-align with padLeft", func(t *testing.T) {
 		if got := padLeft("1d", 4); got != "  1d" {
 			t.Errorf("got %q, want '  1d'", got)
@@ -41,8 +57,8 @@ func TestPad(t *testing.T) {
 
 func TestRenderTerminal(t *testing.T) {
 	rows := []Row{
-		{Tier: tierNeedsAction, IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "https://github.com/me/glint/pull/20"},
-		{Tier: tierReady, IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "https://github.com/me/api/pull/5", Comments: 3},
+		{Tier: tierNeedsAction, Status: "ci_failed", IdleDays: 13, CI: "fail", Merge: "clean", Review: "none", Ref: "glint#20", URL: "https://github.com/me/glint/pull/20"},
+		{Tier: tierReady, Status: "ready", IdleDays: 2, CI: "ok", Merge: "clean", Review: "approved", Ref: "api#5", URL: "https://github.com/me/api/pull/5"},
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
@@ -53,11 +69,60 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should show comment count when nonzero", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, 0)
+	t.Run("should show unresolved comment count for the comments status", func(t *testing.T) {
+		commented := []Row{{Tier: tierNeedsAction, Status: "comments", Unresolved: 3, Repository: "api", URL: "https://x/1"}}
 
-		if !strings.Contains(out, "(3)") {
-			t.Errorf("missing comment count:\n%s", out)
+		out := renderTerminal(commented, 100, false, 0)
+
+		if !strings.Contains(out, "💬") || !strings.Contains(out, "3 comments") {
+			t.Errorf("missing comment status:\n%s", out)
+		}
+	})
+
+	t.Run("should show exactly one emoji per row", func(t *testing.T) {
+		all := []Row{}
+		for tier, status := range []string{"ci_failed", "ready", "building", "no_reviewer", "in_review", "draft", "merged"} {
+			all = append(all, Row{Tier: tier, Status: status, Repository: "api", Title: "t", URL: "https://x/" + status})
+		}
+
+		out := renderTerminal(all, 120, false, 0)
+
+		for _, ln := range strings.Split(out, "\n") {
+			if !strings.Contains(ln, "https://x/") {
+				continue
+			}
+			n := 0
+			for _, c := range ln {
+				if runewidth.RuneWidth(c) == 2 {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Errorf("want 1 emoji, got %d in %q", n, ln)
+			}
+		}
+	})
+
+	t.Run("should align every column across groups using display width", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "one", URL: "https://x/1"},
+			{Tier: tierNoReviewer, Status: "no_reviewer", Repository: "gitops-tenants", Title: "two", URL: "https://x/2"},
+			{Tier: tierWaiting, Status: "in_review", Repository: "web", Title: "three", URL: "https://x/3"},
+		}
+
+		out := renderTerminal(mixed, 140, false, 0)
+
+		col := -1
+		for _, ln := range strings.Split(out, "\n") {
+			i := strings.Index(ln, "https://x/")
+			if i < 0 {
+				continue
+			}
+			w := runewidth.StringWidth(ln[:i])
+			if col != -1 && w != col {
+				t.Errorf("URL column at %d, want %d in %q", w, col, ln)
+			}
+			col = w
 		}
 	})
 
@@ -87,8 +152,8 @@ func TestRenderTerminal(t *testing.T) {
 
 	t.Run("should render merged rows and exclude them from the open count", func(t *testing.T) {
 		mixed := []Row{
-			{Tier: tierNeedsAction, CI: "fail", Merge: "clean", Review: "none", URL: "https://x/1"},
-			{Tier: tierMerged, CI: "none", Merge: "merged", Review: "none", URL: "https://x/2"},
+			{Tier: tierNeedsAction, Status: "ci_failed", URL: "https://x/1"},
+			{Tier: tierMerged, Status: "merged", URL: "https://x/2"},
 		}
 
 		out := renderTerminal(mixed, 120, false, 0)
@@ -104,8 +169,8 @@ func TestRenderTerminal(t *testing.T) {
 	t.Run("should show merge time instead of idle days for merged rows", func(t *testing.T) {
 		mergedAt := time.Date(2026, 8, 4, 14, 32, 0, 0, time.UTC)
 		mixed := []Row{
-			{Tier: tierReady, CI: "ok", Merge: "clean", Review: "approved", URL: "https://x/1"},
-			{Tier: tierMerged, Merge: "merged", MergedAt: &mergedAt, URL: "https://x/2"},
+			{Tier: tierReady, Status: "ready", URL: "https://x/1"},
+			{Tier: tierMerged, Status: "merged", MergedAt: &mergedAt, URL: "https://x/2"},
 		}
 
 		out := renderTerminal(mixed, 120, false, 0)
