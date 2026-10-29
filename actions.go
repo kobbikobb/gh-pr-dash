@@ -46,23 +46,10 @@ func copyToClipboard(text string) error {
 	return cmd.Run()
 }
 
-// agentTools are tried in order when GH_PR_DASH_AGENT_CMD is unset; the message
-// is appended as the final argument.
-var agentTools = []struct {
-	bin  string
-	args []string
-}{
-	{"opencode", []string{"run", "--"}},
-	{"claude", []string{"-p"}},
-	{"aider", []string{"--message"}},
-	{"cursor", []string{"--command", "workbench.action.chat.open"}},
-	{"code", []string{"--command", "workbench.action.chat.open"}},
-}
-
-// deliverToAgent hands msg to an agent and reports what actually happened.
-// Agents run detached with their output discarded, so "started" means the
-// process launched, not that it succeeded. With no agent available it falls
-// back to the clipboard and says so.
+// deliverToAgent hands msg to the command in GH_PR_DASH_AGENT_CMD (message as
+// its last argument) and reports what actually happened. The agent runs
+// detached with its output discarded, so "started" means the process launched,
+// not that it succeeded. Without the variable it copies msg to the clipboard.
 func deliverToAgent(msg string) (string, error) {
 	if fields := strings.Fields(os.Getenv("GH_PR_DASH_AGENT_CMD")); len(fields) > 0 {
 		if err := startDetached(exec.Command(fields[0], append(fields[1:], msg)...)); err != nil {
@@ -70,39 +57,10 @@ func deliverToAgent(msg string) (string, error) {
 		}
 		return "started " + fields[0], nil
 	}
-	for _, t := range agentTools {
-		if _, err := exec.LookPath(t.bin); err != nil {
-			continue
-		}
-		args := append(append([]string{}, t.args...), msg)
-		if err := startDetached(exec.Command(t.bin, args...)); err != nil {
-			return "", err
-		}
-		return "started " + t.bin, nil
-	}
 	if err := copyToClipboard(msg); err != nil {
-		return "", fmt.Errorf("no agent found and clipboard unavailable: %w", err)
+		return "", fmt.Errorf("GH_PR_DASH_AGENT_CMD is unset and clipboard unavailable: %w", err)
 	}
-	return "no agent found, copied to clipboard", nil
-}
-
-var agentHeaders = map[int]string{
-	tierNeedsAction: "Please review and take action on PRs that need attention (CI failures/conflicts):",
-	tierReady:       "Please review and merge ready PRs (approved, green, no conflicts):",
-	tierBuilding:    "Please monitor PRs waiting on CI:",
-	tierWaiting:     "Please review PRs waiting for review:",
-	tierDrafts:      "Please review draft PRs:",
-	tierMerged:      "Please summarize recently merged PRs:",
-}
-
-func agentHeader(group string) string {
-	if group == "a" {
-		return "Please review all open PRs:"
-	}
-	if tier, ok := groupTiers[group]; ok {
-		return agentHeaders[tier]
-	}
-	return "Please review and take action on these PRs:"
+	return "GH_PR_DASH_AGENT_CMD unset, copied to clipboard", nil
 }
 
 func agentMessage(header string, rows []Row) string {

@@ -63,7 +63,7 @@ Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the acti
 Environment:
 
 - `GH_PR_DASH_MERGE_FLAGS` — flags for `gh pr merge` (default `--squash`).
-- `GH_PR_DASH_AGENT_CMD` — command to run with the PR list as its last argument. Otherwise the first of `opencode`, `claude`, `aider`, `cursor`, `code` on `PATH` is used; with none, the list is copied to the clipboard. The status line says which happened. Agents run detached and their output is discarded.
+- `GH_PR_DASH_AGENT_CMD` — command to run with the PR list as its last argument (e.g. `claude -p`). The agent runs detached and its output is discarded. Unset, the list is copied to the clipboard instead. The status line says which happened.
 
 ## Ranking
 

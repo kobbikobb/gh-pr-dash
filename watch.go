@@ -32,7 +32,7 @@ const (
 
 type (
 	fetchMsg struct {
-		seq         int
+		gen         int
 		rows        []Row
 		mergedTotal int
 		err         error
@@ -45,10 +45,54 @@ type (
 	}
 )
 
-// groupTiers maps a group key to its tier; 'a' (all open) is handled separately.
-var groupTiers = map[string]int{
-	"n": tierNeedsAction, "r": tierReady, "c": tierBuilding,
-	"w": tierWaiting, "d": tierDrafts, "t": tierMerged,
+// group is a set of PRs an action can target with one key. The label starts
+// with the key so the hint can render it as "[k]ey". allOpen selects every
+// PR that isn't merged.
+type group struct {
+	key, label string
+	tier       int
+	header     string // agent prompt for this group
+}
+
+const allOpen = -1
+
+var groups = []group{
+	{"n", "needs", tierNeedsAction, "Please review and take action on PRs that need attention (CI failures/conflicts):"},
+	{"r", "ready", tierReady, "Please review and merge ready PRs (approved, green, no conflicts):"},
+	{"c", "ci", tierBuilding, "Please monitor PRs waiting on CI:"},
+	{"w", "waiting", tierWaiting, "Please review PRs waiting for review:"},
+	{"d", "drafts", tierDrafts, "Please review draft PRs:"},
+	{"t", "today", tierMerged, "Please summarize recently merged PRs:"},
+	{"a", "all", allOpen, "Please review all open PRs:"},
+}
+
+const targetHeader = "Please review and take action on these PRs:"
+
+func findGroup(key string) (group, bool) {
+	for _, g := range groups {
+		if g.key == key {
+			return g, true
+		}
+	}
+	return group{}, false
+}
+
+func (g group) pick(rows []Row) []Row {
+	var out []Row
+	for _, r := range rows {
+		if g.tier == allOpen && r.Tier != tierMerged || r.Tier == g.tier {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func groupHint() string {
+	parts := make([]string, len(groups))
+	for i, g := range groups {
+		parts[i] = "[" + g.key + "]" + g.label[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 var actionNames = map[rune]string{'o': "open", 'm': "merge", 'x': "agent"}
@@ -64,9 +108,8 @@ type watchModel struct {
 	lastFetch     time.Time
 	nextRefresh   time.Time
 
-	fetchSeq   int       // newest fetch issued
-	appliedSeq int       // newest fetch applied
-	deferred   *fetchMsg // result held back while the user is mid-action
+	gen      int       // bumped after a merge; fetches from an older gen are stale
+	deferred *fetchMsg // result held back while the user is mid-action
 
 	action  rune   // pending action key (o/m/x) awaiting a target
 	input   string // typed PR numbers for the pending action
@@ -81,15 +124,14 @@ func newWatchModel(opts options) watchModel {
 		opts:        opts,
 		useColor:    detectTerminal().useColor,
 		nextRefresh: time.Now().Add(opts.interval),
-		fetchSeq:    1,
 	}
 }
 
-func (m watchModel) fetchCmd(seq int) tea.Cmd {
-	opts := m.opts
+func (m watchModel) fetchCmd() tea.Cmd {
+	opts, gen := m.opts, m.gen
 	return func() tea.Msg {
 		rows, total, err := fetchRows(opts, time.Now())
-		return fetchMsg{seq, rows, total, err}
+		return fetchMsg{gen, rows, total, err}
 	}
 }
 
@@ -102,7 +144,7 @@ func (m watchModel) dataTick() tea.Cmd {
 }
 
 func (m watchModel) Init() tea.Cmd {
-	return tea.Batch(m.fetchCmd(m.fetchSeq), animTick(), m.dataTick())
+	return tea.Batch(m.fetchCmd(), animTick(), m.dataTick())
 }
 
 // busy is true while the user is typing a target, confirming, or a merge runs.
@@ -112,10 +154,6 @@ func (m watchModel) busy() bool {
 }
 
 func (m watchModel) applyFetch(msg fetchMsg) watchModel {
-	if msg.seq < m.appliedSeq {
-		return m
-	}
-	m.appliedSeq = msg.seq
 	if msg.err != nil {
 		m.errMsg = msg.err.Error()
 		return m
@@ -138,11 +176,11 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case fetchMsg:
-		if m.busy() {
-			if m.deferred == nil || msg.seq > m.deferred.seq {
-				m.deferred = &msg
-			}
-		} else {
+		switch {
+		case msg.gen != m.gen:
+		case m.busy():
+			m.deferred = &msg
+		default:
 			m = m.applyFetch(msg)
 		}
 	case animMsg:
@@ -150,16 +188,15 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, animTick()
 	case dataMsg:
 		m.nextRefresh = time.Now().Add(m.opts.interval)
-		m.fetchSeq++
-		return m, tea.Batch(m.fetchCmd(m.fetchSeq), m.dataTick())
+		return m, tea.Batch(m.fetchCmd(), m.dataTick())
 	case mergeMsg:
 		m.merging = false
 		m.status = mergeStatus(msg)
 		// Anything fetched before the merge finished is stale; only the fetch
 		// issued now may replace the rows.
-		m.fetchSeq++
-		m.appliedSeq, m.deferred = m.fetchSeq, nil
-		return m.settle(), m.fetchCmd(m.fetchSeq)
+		m.gen++
+		m.deferred = nil
+		return m.settle(), m.fetchCmd()
 	case tea.KeyMsg:
 		next, cmd := m.key(msg)
 		return next.settle(), cmd
@@ -168,15 +205,16 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
-	k := msg.String()
 	if msg.Paste {
-		// Pasted text is only meaningful as target numbers; never let it
-		// trigger an action or a confirmation.
-		if m.action == 0 || m.confirm != nil || m.merging {
-			return m, nil
+		// Pasted text is only ever target numbers; it must never trigger an
+		// action, a group, or a confirmation.
+		text := strings.NewReplacer("\r", "", "\n", "").Replace(string(msg.Runes))
+		if m.action != 0 && m.confirm == nil && !m.merging && isTargetText(text) {
+			m.input += text
 		}
-		k = string(msg.Runes)
+		return m, nil
 	}
+	k := msg.String()
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
@@ -227,14 +265,12 @@ func (m watchModel) keyTarget(k string, rows []Row) (watchModel, tea.Cmd) {
 			m.input = m.input[:len(m.input)-1]
 		}
 	case k == "enter":
-		return m.run(parseTargets(m.input, rows), "")
+		return m.run(parseTargets(m.input, rows), group{})
 	case isTargetText(k):
 		m.input += k
-	case m.input == "" && k == "a":
-		return m.run(openRows(rows), "a")
 	case m.input == "":
-		if tier, ok := groupTiers[k]; ok {
-			return m.run(tierRows(rows, tier), k)
+		if g, ok := findGroup(k); ok {
+			return m.run(g.pick(rows), g)
 		}
 	}
 	return m, nil
@@ -253,26 +289,6 @@ func isTargetText(k string) bool {
 	return true
 }
 
-func openRows(rows []Row) []Row {
-	var out []Row
-	for _, r := range rows {
-		if r.Tier != tierMerged {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-func tierRows(rows []Row, tier int) []Row {
-	var out []Row
-	for _, r := range rows {
-		if r.Tier == tier {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
 // parseTargets resolves "1,3 5" against the displayed row numbers, ignoring
 // anything out of range or repeated.
 func parseTargets(input string, rows []Row) []Row {
@@ -289,7 +305,7 @@ func parseTargets(input string, rows []Row) []Row {
 	return out
 }
 
-func (m watchModel) run(targets []Row, group string) (watchModel, tea.Cmd) {
+func (m watchModel) run(targets []Row, g group) (watchModel, tea.Cmd) {
 	action := m.action
 	m.action, m.input = 0, ""
 	if len(targets) == 0 {
@@ -301,14 +317,18 @@ func (m watchModel) run(targets []Row, group string) (watchModel, tea.Cmd) {
 	case 'o':
 		m.status = openStatus(targets)
 	case 'm':
-		ready := tierRows(targets, tierReady)
+		ready := group{tier: tierReady}.pick(targets)
 		if len(ready) == 0 {
 			m.status = "nothing to merge: only ready PRs (approved, CI green, no conflicts) can be merged"
 			return m, nil
 		}
 		m.confirm, m.skipped = ready, len(targets)-len(ready)
 	case 'x':
-		how, err := deliverToAgent(agentMessage(agentHeader(group), targets))
+		header := g.header
+		if header == "" {
+			header = targetHeader
+		}
+		how, err := deliverToAgent(agentMessage(header, targets))
 		if err != nil {
 			m.status = "agent failed: " + err.Error()
 		} else {
@@ -385,8 +405,6 @@ func mergeStatus(r mergeMsg) string {
 	return strings.Join(lines, "\n")
 }
 
-const groupHint = "[n]eeds [r]eady [c]i [w]aiting [d]rafts [t]oday [a]ll"
-
 // footer is the bottom help/prompt block (one or more lines) for the current
 // input state.
 func (m watchModel) footer() string {
@@ -406,7 +424,7 @@ func (m watchModel) footer() string {
 		}
 		return strings.Join(append(lines, "[y] merge · [n]/esc cancel"), "\n")
 	case m.action != 0:
-		hint := "numbers (1,3) + enter, or a group now: " + groupHint + " · esc cancel"
+		hint := "numbers (1,3) + enter, or a group now: " + groupHint() + " · esc cancel"
 		if m.input != "" {
 			hint = "enter run · backspace edit · esc cancel"
 		}

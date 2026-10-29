@@ -133,7 +133,7 @@ func TestFetchResultHeldWhileActionPending(t *testing.T) {
 	m := press(testModel(), "o", "1")
 	fresh := []Row{{Ref: "z#9", Tier: tierReady}}
 
-	next, _ := m.Update(fetchMsg{seq: 5, rows: fresh})
+	next, _ := m.Update(fetchMsg{rows: fresh})
 	m = next.(watchModel)
 	if m.rows[0].Ref != "a#1" {
 		t.Fatalf("rows changed mid-action: %v", m.rows)
@@ -147,9 +147,9 @@ func TestFetchResultHeldWhileActionPending(t *testing.T) {
 
 func TestStaleFetchIsIgnored(t *testing.T) {
 	m := testModel()
-	m.appliedSeq = 3
+	m.gen = 3
 
-	next, _ := m.Update(fetchMsg{seq: 2, rows: []Row{{Ref: "old#1"}}})
+	next, _ := m.Update(fetchMsg{gen: 2, rows: []Row{{Ref: "old#1"}}})
 
 	if next.(watchModel).rows[0].Ref != "a#1" {
 		t.Error("older fetch overwrote newer data")
@@ -165,7 +165,8 @@ func TestMergeStatusReportsFailures(t *testing.T) {
 }
 
 func TestAgentMessageListsTargets(t *testing.T) {
-	got := agentMessage(agentHeader("r"), []Row{{Ref: "a#2", Title: "good", URL: "u"}})
+	g, _ := findGroup("r")
+	got := agentMessage(g.header, []Row{{Ref: "a#2", Title: "good", URL: "u"}})
 
 	if !strings.Contains(got, "merge ready PRs") || !strings.Contains(got, "- [a#2] good - u") {
 		t.Errorf("got %q", got)
@@ -185,8 +186,7 @@ func TestPastedTargetsAreAccepted(t *testing.T) {
 func TestMergeResultDiscardsPreMergeFetches(t *testing.T) {
 	m := testModel()
 	m.merging = true
-	m.fetchSeq = 4
-	m.deferred = &fetchMsg{seq: 4, rows: []Row{{Ref: "stale#1", Tier: tierReady}}}
+	m.deferred = &fetchMsg{rows: []Row{{Ref: "stale#1", Tier: tierReady}}}
 
 	next, cmd := m.Update(mergeMsg{merged: 1})
 	m = next.(watchModel)
@@ -194,7 +194,7 @@ func TestMergeResultDiscardsPreMergeFetches(t *testing.T) {
 	if m.rows[0].Ref != "a#1" || m.deferred != nil || cmd == nil {
 		t.Errorf("rows=%v deferred=%v cmd=%v: stale fetch applied or no refetch", m.rows, m.deferred, cmd)
 	}
-	next, _ = m.Update(fetchMsg{seq: 4, rows: []Row{{Ref: "stale#1"}}})
+	next, _ = m.Update(fetchMsg{gen: 0, rows: []Row{{Ref: "stale#1"}}})
 	if next.(watchModel).rows[0].Ref != "a#1" {
 		t.Error("in-flight pre-merge fetch overwrote rows")
 	}
@@ -253,5 +253,16 @@ func TestPasteNeverTriggersActions(t *testing.T) {
 
 	if got := next.(watchModel); got.merging || got.confirm == nil || cmd != nil {
 		t.Error("pasted 'y' confirmed a merge")
+	}
+}
+
+func TestPastedGroupLetterDoesNotRunAction(t *testing.T) {
+	m := press(testModel(), "o")
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Paste: true})
+
+	got := next.(watchModel)
+	if got.action != 'o' || got.input != "" || got.status != "" {
+		t.Errorf("pasted 'a' ran an action: %+v", got)
 	}
 }
