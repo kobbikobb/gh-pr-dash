@@ -18,16 +18,16 @@
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
 ```
-Needs action — CI fail / conflict / comments (3)
+🚨 Needs action — CI fail / conflict / comments (3)
  1.  🔴  CI failed     2d  api  Fix token refresh        https://github.com/me/api/pull/1008
  2.  🚧  conflict      1d  api  Retry on 502             https://github.com/me/api/pull/1010
  3.  💬  3 comments    4h  web  Add dark mode            https://github.com/me/web/pull/98
 
-Ready to merge (1)
- 4.  ✅  ready         3h  api  Validate regulator config https://github.com/me/api/pull/12385
+✅ Ready to merge (1)
+ 4.                  3h  api  Validate regulator config https://github.com/me/api/pull/12385
 ```
 
-Each row shows **one** status emoji and a short label — the most important reason the PR is in its group (failed build, then conflict, then unresolved review comments). Then **idle** days (or the merge time for merged rows), repo, title, and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Each group heading has its own emoji. Rows in **Needs action** also show one status emoji and label — the most important reason (failed build, then conflict, then unresolved review comments). Other groups don't repeat what the heading says. Then **idle** days (or the merge time for merged rows), repo, title, and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
 
 ## Install
 

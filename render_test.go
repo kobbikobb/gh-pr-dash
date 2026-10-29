@@ -79,27 +79,41 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should show exactly one emoji per row", func(t *testing.T) {
-		all := []Row{}
-		for tier, status := range []string{"ci_failed", "ready", "building", "no_reviewer", "in_review", "draft", "merged"} {
-			all = append(all, Row{Tier: tier, Status: status, Repository: "api", Title: "t", URL: "https://x/" + status})
+	t.Run("should show a status emoji only on needs-action rows", func(t *testing.T) {
+		mixed := []Row{
+			{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "t", URL: "https://x/1"},
+			{Tier: tierWaiting, Status: "in_review", Repository: "api", Title: "t", URL: "https://x/2"},
 		}
 
-		out := renderTerminal(all, 120, false, 0)
+		out := renderTerminal(mixed, 120, false, 0)
 
 		for _, ln := range strings.Split(out, "\n") {
-			if !strings.Contains(ln, "https://x/") {
-				continue
-			}
-			n := 0
-			for _, c := range ln {
-				if runewidth.RuneWidth(c) == 2 {
-					n++
+			switch {
+			case strings.Contains(ln, "https://x/1"):
+				if !strings.Contains(ln, "🔴") || !strings.Contains(ln, "CI failed") {
+					t.Errorf("needs-action row missing status: %q", ln)
+				}
+			case strings.Contains(ln, "https://x/2"):
+				if strings.Contains(ln, "👀") || strings.Contains(ln, "in review") {
+					t.Errorf("waiting row should not repeat its heading: %q", ln)
 				}
 			}
-			if n != 1 {
-				t.Errorf("want 1 emoji, got %d in %q", n, ln)
-			}
+		}
+	})
+
+	t.Run("should put each tier's emoji in its heading", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierNoReviewer, Status: "no_reviewer", URL: "https://x/1"}}, 120, false, 0)
+
+		if !strings.Contains(out, "🙋 Needs reviewer (1)") {
+			t.Errorf("heading missing emoji:\n%s", out)
+		}
+	})
+
+	t.Run("should omit the status column when no row needs action", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierDrafts, Status: "draft", Repository: "api", URL: "https://x/1"}}, 120, false, 0)
+
+		if strings.Contains(out, "draft  ") || strings.Contains(out, "📝 draft") {
+			t.Errorf("unexpected status text:\n%s", out)
 		}
 	})
 
