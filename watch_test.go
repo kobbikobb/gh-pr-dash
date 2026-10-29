@@ -25,3 +25,13 @@ func TestRefreshStatus(t *testing.T) {
 		}
 	})
 }
+
+func TestParseTargets(t *testing.T) {
+	rows := []Row{{Ref: "a#1"}, {Ref: "a#2"}, {Ref: "a#3"}}
+
+	got := parseTargets("3, 1 3 9 x", rows)
+
+	if len(got) != 2 || got[0].Ref != "a#3" || got[1].Ref != "a#1" {
+		t.Errorf("got %v, want a#3 then a#1 (deduped, out-of-range ignored)", got)
+	}
+}
