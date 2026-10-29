@@ -122,10 +122,12 @@ func reviewCode(pr ghPR) string {
 	switch {
 	case changes:
 		return "changes"
-	case approved:
-		return "approved"
+	// Some approval exists but GitHub still wants more (e.g. a required team),
+	// so the PR is not approved yet.
 	case pr.ReviewDecision == "REVIEW_REQUIRED":
 		return "review"
+	case approved:
+		return "approved"
 	default:
 		return "none"
 	}
@@ -178,6 +180,11 @@ func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 		case "pending":
 			return tierBuilding
 		case "ok":
+			// Green and approved but GitHub still blocks the merge (e.g. a
+			// required check or branch rule), so it is not ready for the user.
+			if pr.MergeStateStatus == "BLOCKED" {
+				return tierWaiting
+			}
 			return tierReady
 		default:
 			// No rollup: ready only when GitHub says nothing blocks the merge;

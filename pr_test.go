@@ -222,6 +222,34 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
+	t.Run("should not rank an approved PR as ready while a required review is outstanding", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "REVIEW_REQUIRED"
+			p.MergeStateStatus = "BLOCKED"
+			p.ReviewRequests.TotalCount = 1
+			p.LatestOpinionatedReviews.Nodes = []struct{ State string }{{State: "APPROVED"}}
+			setRollup(p, "SUCCESS")
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierWaiting || row.Review != "review" {
+			t.Errorf("tier = %d, review = %q; want waiting, review", row.Tier, row.Review)
+		}
+	})
+
+	t.Run("should not rank an approved green PR as ready when the merge is blocked", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			p.MergeStateStatus = "BLOCKED"
+			setRollup(p, "SUCCESS")
+		})
+
+		if classify(pr, time.Now()).Tier == tierReady {
+			t.Error("blocked PR must not be ready")
+		}
+	})
+
 	t.Run("should rank drafts last", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) { p.IsDraft = true })
 
