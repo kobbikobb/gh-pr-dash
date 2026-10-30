@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestTruncate(t *testing.T) {
@@ -212,6 +214,40 @@ func TestRenderHeader(t *testing.T) {
 
 		if out0 == out1 {
 			t.Error("header should change between ticks")
+		}
+	})
+}
+
+func TestStatusColumn(t *testing.T) {
+	t.Run("should have a theme entry for every status code", func(t *testing.T) {
+		for tier := tierNeedsAction; tier <= tierMerged; tier++ {
+			for _, queue := range []string{"", "UNMERGEABLE", "QUEUED"} {
+				for _, ci := range []string{"ok", "fail"} {
+					code := statusFor(tier, ci, "conflict", queue)
+					if _, ok := statuses[code]; !ok {
+						t.Errorf("no theme entry for status %q", code)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("should show the queue position", func(t *testing.T) {
+		got := statusLabel(Row{Status: "queued", QueuePos: 2})
+
+		if !strings.HasSuffix(got, "Queued #2") {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("should pad by display width so emoji rows align", func(t *testing.T) {
+		rows := []Row{{Status: "ci_failed"}, {Status: "queued", QueuePos: 12}}
+		w := statusWidth(rows)
+
+		for _, r := range rows {
+			if got := runewidth.StringWidth(statusField(r, w, colors(false))); got != w {
+				t.Errorf("%s: width %d, want %d", r.Status, got, w)
+			}
 		}
 	})
 }

@@ -73,32 +73,6 @@ func indent(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func ciGlyph(code string, p palette) string {
-	switch code {
-	case "ok":
-		return p.g + "✓" + p.z
-	case "fail":
-		return p.r + "✗" + p.z
-	case "pending":
-		return p.y + "•" + p.z
-	default:
-		return p.d + "·" + p.z
-	}
-}
-
-func mergeColor(code string, p palette) string {
-	switch code {
-	case "conflict":
-		return p.r
-	case "unknown":
-		return p.y
-	case "merged":
-		return p.c
-	default:
-		return p.d
-	}
-}
-
 func idleColor(days int, p palette) string {
 	switch {
 	case days >= 14:
@@ -167,7 +141,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
 	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
-	prefixW := 1 + numW + 2 + 1 + 2 + 8 + 2 + idleW + 2
+	statusW := statusWidth(rows)
+	prefixW := 1 + numW + 2 + statusW + 2 + idleW + 2
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -208,13 +183,13 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
 		title := padRight(truncate(titles[i], titleW), titleW)
-		merge := mergeColor(r.Merge, p) + padRight(r.Merge, 8) + p.z
+		status := statusField(r, statusW, p)
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, " %s  %s  %s  %s  %s  %s   %s\n",
-			num, ciGlyph(r.CI, p), merge, idle, repo, title, url)
+		fmt.Fprintf(&b, " %s  %s  %s  %s  %s   %s\n",
+			num, status, idle, repo, title, url)
 	}
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
