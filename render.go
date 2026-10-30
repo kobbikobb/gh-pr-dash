@@ -115,6 +115,7 @@ type view struct {
 	cursor      string
 	collapsed   map[int]bool
 	interactive bool
+	search      string // title filter; the header and empty state mention it
 }
 
 // renderPanels produces the aligned, grouped panels. mergedTotal is the real

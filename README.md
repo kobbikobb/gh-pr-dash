@@ -45,12 +45,13 @@ A cursor (`❯`) marks the selected PR. Lowercase keys act on it; the capital ve
 |---|---|
 | `↑` `↓` / `k` `j` | move the cursor |
 | `1`–`7` | jump to a category (unfolds it if folded) |
-| `enter` | fold the cursor's category to just its border |
+| `/` | filter by title as you type (case-insensitive); `enter` keeps the filter |
+| `enter` | fold / unfold the cursor's category |
 | `o` / `O` | open the PR / the whole category in the browser (max 10 at once) |
 | `m` / `M` | merge — only **ready** PRs; lists them and waits for `y` |
 | `a` / `A` | send the PR / the whole category to an agent |
 | `?` | show help |
-| `esc` | clear the status line or help |
+| `esc` | clear the filter, then the status line or help |
 | `q` | quit |
 
 Refreshes pause while a merge is awaiting confirmation. The cursor follows its PR across refreshes.

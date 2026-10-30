@@ -75,6 +75,8 @@ type watchModel struct {
 	lastIdx   int          // cursor position before the last refresh, for re-seating it
 	collapsed map[int]bool // categories folded to just their border
 	help      bool
+	search    string // case-insensitive title filter
+	searching bool   // keystrokes are typed into the filter
 
 	confirm []Row // PRs awaiting y/n confirmation to merge
 	merging bool
@@ -183,10 +185,20 @@ func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
 		return m.keyConfirm(k)
 	}
 
+	if m.searching {
+		return m.keySearch(msg), nil
+	}
+
 	switch k {
 	case "q":
 		return m, tea.Quit
+	case "/":
+		m.searching, m.help, m.status = true, false, ""
 	case "esc":
+		if m.search != "" {
+			m.search = ""
+			return m.fixCursor(), nil
+		}
 		m.help, m.status = false, ""
 	case "?":
 		m.help = !m.help
@@ -202,6 +214,31 @@ func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
 		return m.act(k)
 	}
 	return m, nil
+}
+
+// keySearch types into the title filter; the list narrows as you type. enter
+// keeps the filter, esc drops it.
+func (m watchModel) keySearch(msg tea.KeyMsg) watchModel {
+	switch msg.Type {
+	case tea.KeyEnter:
+		m.searching = false
+	case tea.KeyEsc:
+		m.searching, m.search = false, ""
+	case tea.KeyBackspace:
+		if r := []rune(m.search); len(r) > 0 {
+			m.search = string(r[:len(r)-1])
+		}
+	case tea.KeySpace:
+		m.search += " "
+	case tea.KeyRunes:
+		m.search += string(msg.Runes)
+	}
+	return m.fixCursor()
+}
+
+// visible is the rows after the repo and title filters.
+func (m watchModel) visible() []Row {
+	return filterTitle(filterRows(m.rows, m.opts.repo), m.search)
 }
 
 func (m watchModel) keyConfirm(k string) (watchModel, tea.Cmd) {
@@ -223,7 +260,7 @@ func (m watchModel) keyConfirm(k string) (watchModel, tea.Cmd) {
 func (m watchModel) shown() []Row {
 	var out []Row
 	last := -1
-	for _, r := range filterRows(m.rows, m.opts.repo) {
+	for _, r := range m.visible() {
 		// A folded category keeps one stop (its first PR) so enter can unfold it.
 		if !m.collapsed[r.Tier] || r.Tier != last {
 			out = append(out, r)
@@ -284,7 +321,7 @@ func (m watchModel) move(delta int) watchModel {
 
 // jump moves to the first PR of a category, unfolding it if needed.
 func (m watchModel) jump(tier int) watchModel {
-	rows := inTier(filterRows(m.rows, m.opts.repo), tier)
+	rows := inTier(m.visible(), tier)
 	if len(rows) == 0 {
 		m.status = "no PRs in " + categories[tier].name
 		return m
@@ -322,7 +359,7 @@ func (m watchModel) act(k string) (watchModel, tea.Cmd) {
 	m.status = ""
 	targets, header := []Row{sel}, targetHeader
 	if k == strings.ToUpper(k) {
-		targets, header = inTier(filterRows(m.rows, m.opts.repo), sel.Tier), categories[sel.Tier].agent
+		targets, header = inTier(m.visible(), sel.Tier), categories[sel.Tier].agent
 	}
 
 	switch strings.ToLower(k) {
@@ -426,10 +463,17 @@ func (m watchModel) footer() string {
 		}
 		return strings.Join(append(lines, "[y] merge · [n]/esc cancel"), "\n")
 	}
-	help := "[o] open  [m] merge  [a] agent  [↑↓] move  [1-7] go to category  [?] help  [q] quit"
+	if m.searching {
+		return "/" + m.search + "▏\nenter keep filter · esc clear"
+	}
+	help := "[o] open  [m] merge  [a] agent  [/] filter  [↑↓] move  [1-7] go to category  [?] help  [q] quit"
+	if m.search != "" {
+		help = "filter: \"" + m.search + "\" · esc clear  ·  " + help
+	}
 	if m.help {
 		help = strings.Join([]string{
 			"↑/↓ or j/k   move the cursor",
+			"/            filter by title (enter keeps it, esc clears it)",
 			"1-7          jump to a category (unfolds it)",
 			"enter        fold / unfold the cursor's category",
 			"o  m  a      open / merge / send to agent: the selected PR",
@@ -449,7 +493,7 @@ func (m watchModel) View() string {
 	}
 	t := terminal{width: m.width, height: m.height, useColor: m.useColor}
 	return renderWatch(m.opts, m.tick, m.rows, m.mergedTotal, m.errMsg, refreshStatus(m.lastFetch, m.nextRefresh), m.footer(), t,
-		view{cursor: m.cursor, collapsed: m.collapsed, interactive: true})
+		view{cursor: m.cursor, collapsed: m.collapsed, interactive: true, search: m.search})
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {
@@ -501,10 +545,13 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 			out += p.y + "  ⚠ --repo \"" + opts.repo + "\" matched no PRs" + p.z + "\n"
 		}
 		total := mergedTotal
-		if opts.repo != "" {
+		if opts.repo != "" || v.search != "" {
 			total = 0
 		}
-		if inner >= sidebarMinTotal {
+		filtered = filterTitle(filtered, v.search)
+		if v.search != "" && len(filtered) == 0 {
+			out += p.y + "  no PR title matches \"" + v.search + "\"" + p.z + "\n"
+		} else if inner >= sidebarMinTotal {
 			bodyW := inner - sidebarWidth - sidebarGap
 			out += withSidebar(renderPanels(filtered, bodyW, t.useColor, total, v), renderSidebar(filtered, p), bodyW)
 		} else {
