@@ -170,10 +170,10 @@ func TestRenderHeader(t *testing.T) {
 	t.Run("should render the header box with wordmark", func(t *testing.T) {
 		out := renderHeader(0, false, 60, 40, headerInfo{})
 
-		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
+		if !strings.Contains(out, "╭") || !strings.Contains(out, "╯") {
 			t.Errorf("missing box:\n%s", out)
 		}
-		if !strings.Contains(out, "███") {
+		if !strings.Contains(out, "╔═╗╦═╗") {
 			t.Errorf("missing wordmark:\n%s", out)
 		}
 	})
@@ -204,7 +204,7 @@ func TestRenderHeader(t *testing.T) {
 	t.Run("should collapse to a one-line bar on short terminals", func(t *testing.T) {
 		out := renderHeader(0, false, 80, 10, headerInfo{})
 
-		if strings.Contains(out, "╔") || strings.Contains(out, "███") {
+		if strings.Contains(out, "╭") || strings.Contains(out, "╔═╗") {
 			t.Errorf("box should collapse on short height:\n%s", out)
 		}
 		if !strings.Contains(out, appName) {
