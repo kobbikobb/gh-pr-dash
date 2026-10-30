@@ -193,7 +193,7 @@ func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 		return tierNeedsAction
 	case pr.MergeQueueEntry != nil:
 		return tierBuilding
-	case ci == "fail" || merge == "conflict" || unresolved > 0:
+	case ci == "fail" || merge == "conflict" || review == "changes" || unresolved > 0:
 		return tierNeedsAction
 	case review == "approved" && merge == "clean":
 		switch ci {
@@ -222,9 +222,9 @@ func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 }
 
 // statusFor picks the one status a row shows. Within needs-action the order
-// is: rejected by the merge queue, failed build, conflict, then unresolved
-// comments.
-func statusFor(tier int, ci, merge, queue string) string {
+// is: rejected by the merge queue, failed build, conflict, then changes
+// requested, then unresolved comments.
+func statusFor(tier int, ci, merge, review, queue string) string {
 	switch tier {
 	case tierNeedsAction:
 		switch {
@@ -234,6 +234,8 @@ func statusFor(tier int, ci, merge, queue string) string {
 			return "ci_failed"
 		case merge == "conflict":
 			return "conflict"
+		case review == "changes":
+			return "changes"
 		default:
 			return "comments"
 		}
@@ -268,7 +270,7 @@ func classify(pr ghPR, now time.Time) Row {
 
 	return Row{
 		Tier:       tier,
-		Status:     statusFor(tier, ci, merge, queueState(pr)),
+		Status:     statusFor(tier, ci, merge, review, queueState(pr)),
 		QueuePos:   queuePos,
 		Unresolved: unresolved,
 		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),

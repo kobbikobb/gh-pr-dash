@@ -17,7 +17,7 @@
 
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
-On terminals 130+ columns wide a legend sidebar lists the status icons and per-category counts. Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), and title (with comment count). Press `o` to open the PR.
+On terminals 130+ columns wide a legend sidebar lists the status icons and per-category counts. Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🔧 Changes requested`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), and title (with comment count). Press `o` to open the PR.
 
 ## Install
 
@@ -66,7 +66,7 @@ Seven tiers, most-stale-first within each:
 
 | Tier | Meaning |
 |---|---|
-| **Needs action** | merge queue rejected it, CI failing, merge conflict, or unresolved review threads |
+| **Needs action** | merge queue rejected it, CI failing, merge conflict, changes requested, or unresolved review threads |
 | **Ready to merge** | approved (no review still required), CI green, no conflicts, not blocked by GitHub |
 | **In progress** | approved but CI still running, or in the merge queue |
 | **Needs reviewer** | nobody asked to review or has reviewed (the author's own replies don't count) |

@@ -134,6 +134,16 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
+	t.Run("should rank requested changes as needs-action", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { p.ReviewDecision = "CHANGES_REQUESTED"; setRollup(p, "SUCCESS") })
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierNeedsAction || row.Status != "changes" {
+			t.Errorf("tier=%d status=%q, want needs-action/changes", row.Tier, row.Status)
+		}
+	})
+
 	t.Run("should rank approved+green+clean as ready", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) { p.ReviewDecision = "APPROVED"; setRollup(p, "SUCCESS") })
 
@@ -472,25 +482,27 @@ func TestFilterRows(t *testing.T) {
 
 func TestStatusFor(t *testing.T) {
 	cases := []struct {
-		name             string
-		tier             int
-		ci, merge, queue string
-		want             string
+		name                     string
+		tier                     int
+		ci, merge, review, queue string
+		want                     string
 	}{
-		{"failed build beats conflict", tierNeedsAction, "fail", "conflict", "", "ci_failed"},
-		{"conflict beats comments", tierNeedsAction, "ok", "conflict", "", "conflict"},
-		{"comments when nothing else blocks", tierNeedsAction, "ok", "clean", "", "comments"},
-		{"ready", tierReady, "ok", "clean", "", "ready"},
-		{"building", tierBuilding, "pending", "clean", "", "building"},
-		{"no reviewer", tierNoReviewer, "ok", "clean", "", "no_reviewer"},
-		{"in review", tierWaiting, "ok", "clean", "", "in_review"},
-		{"draft", tierDrafts, "fail", "conflict", "", "draft"},
-		{"queued", tierBuilding, "ok", "clean", "QUEUED", "queued"},
-		{"queue rejection beats everything", tierNeedsAction, "fail", "conflict", "UNMERGEABLE", "queue_failed"},
+		{"failed build beats conflict", tierNeedsAction, "fail", "conflict", "", "", "ci_failed"},
+		{"conflict beats comments", tierNeedsAction, "ok", "conflict", "", "", "conflict"},
+		{"conflict beats changes requested", tierNeedsAction, "ok", "conflict", "changes", "", "conflict"},
+		{"changes requested beats comments", tierNeedsAction, "ok", "clean", "changes", "", "changes"},
+		{"comments when nothing else blocks", tierNeedsAction, "ok", "clean", "", "", "comments"},
+		{"ready", tierReady, "ok", "clean", "", "", "ready"},
+		{"building", tierBuilding, "pending", "clean", "", "", "building"},
+		{"no reviewer", tierNoReviewer, "ok", "clean", "", "", "no_reviewer"},
+		{"in review", tierWaiting, "ok", "clean", "", "", "in_review"},
+		{"draft", tierDrafts, "fail", "conflict", "", "", "draft"},
+		{"queued", tierBuilding, "ok", "clean", "", "QUEUED", "queued"},
+		{"queue rejection beats everything", tierNeedsAction, "fail", "conflict", "", "UNMERGEABLE", "queue_failed"},
 	}
 	for _, c := range cases {
 		t.Run("should pick "+c.name, func(t *testing.T) {
-			if got := statusFor(c.tier, c.ci, c.merge, c.queue); got != c.want {
+			if got := statusFor(c.tier, c.ci, c.merge, c.review, c.queue); got != c.want {
 				t.Errorf("got %q, want %q", got, c.want)
 			}
 		})
