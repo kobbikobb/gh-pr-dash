@@ -17,7 +17,7 @@
 
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
-Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL.
+Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), and title (with comment count). Press `o` to open the PR.
 
 ## Install
 

@@ -139,14 +139,13 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 	}
 
 	// Title column is as wide as the longest title, but no wider than the space
-	// left once the fixed columns and the URL are accounted for — so the URL sits
-	// right after the titles rather than flush against a (possibly mis-detected)
-	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
+	// left once the fixed columns are accounted for. Avoids both a huge gap on
+	// wide terminals and overflow on narrow.
 	const markW = 2 // cursor marker and its space
 	statusW := statusWidth(rows)
 	contentW := width - panelOverhead
 	prefixW := markW + statusW + 2 + idleW + 2
-	longest, urlW, longestRepo := 0, 0, 0
+	longest, longestRepo := 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
 		t := r.Title
@@ -157,15 +156,12 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 		if n := runewidth.StringWidth(t); n > longest {
 			longest = n
 		}
-		if n := runewidth.StringWidth(r.URL); n > urlW {
-			urlW = n
-		}
 		if n := runewidth.StringWidth(r.Repository); n > longestRepo {
 			longestRepo = n
 		}
 	}
 	repoW := longestRepo
-	titleW := contentW - prefixW - 2 - 3 - urlW - repoW
+	titleW := contentW - prefixW - 2 - repoW
 	if titleW > longest {
 		titleW = longest
 	}
@@ -173,9 +169,9 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 		titleW = 12
 	}
 
-	// The URL and the minimum title are never shrunk, so on a very narrow
-	// terminal the panel grows to fit its rows rather than mis-aligning borders.
-	width = max(width, panelOverhead+prefixW+repoW+2+titleW+3+urlW)
+	// The minimum title is never shrunk, so on a very narrow terminal the panel
+	// grows to fit its rows rather than mis-aligning borders.
+	width = max(width, panelOverhead+prefixW+repoW+2+titleW)
 
 	var b strings.Builder
 	tier := -1
@@ -196,6 +192,9 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 			if v.interactive {
 				title += " " + chevron(v.collapsed[tier])
 			}
+			if v.collapsed[tier] && v.cursor == r.URL {
+				title = "❯ " + title
+			}
 			b.WriteString(panelTop(title, desc, width, border, p) + "\n")
 		}
 
@@ -210,10 +209,9 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 		status := statusField(r, statusW, p)
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
-		url := p.d + r.URL + p.z
 
-		line := fmt.Sprintf("%s%s  %s  %s  %s   %s", mark, status, idle, repo, title, url)
-		plainW := prefixW + repoW + 2 + titleW + 3 + len([]rune(r.URL))
+		line := fmt.Sprintf("%s%s  %s  %s  %s", mark, status, idle, repo, title)
+		plainW := prefixW + repoW + 2 + titleW
 		b.WriteString(panelLine(line, plainW, width, border, p) + "\n")
 	}
 	b.WriteString(panelBottom(width, border, p) + "\n")
