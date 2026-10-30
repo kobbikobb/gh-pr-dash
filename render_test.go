@@ -362,3 +362,15 @@ func TestHeaderInfoNeverOverflows(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelsFitNarrowTerminal(t *testing.T) {
+	rows := []Row{{Tier: tierNeedsAction, Status: "ci_failed", Repository: "acme/very-long-repository-name", Title: "A reasonably long pull request title", URL: "u"}}
+
+	out := renderPanels(rows, 76, false, 0, view{})
+
+	for _, ln := range strings.Split(strings.TrimSpace(out), "\n") {
+		if got := runewidth.StringWidth(ln); got > 76 {
+			t.Errorf("line is %d wide, want <= 76: %q", got, ln)
+		}
+	}
+}

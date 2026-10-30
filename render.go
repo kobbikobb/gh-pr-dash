@@ -167,7 +167,8 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 			longestRepo = n
 		}
 	}
-	repoW := longestRepo
+	// Repo names give way before titles do, down to a floor.
+	repoW := max(min(longestRepo, contentW-prefixW-2-12), 10)
 	titleW := contentW - prefixW - 2 - repoW
 	if titleW > longest {
 		titleW = longest
