@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/lipgloss v1.1.1-0.20250319133953-166f707985bc
 	github.com/cli/go-gh/v2 v2.12.1
 	github.com/mattn/go-runewidth v0.0.16
 	golang.org/x/term v0.30.0
@@ -12,7 +13,6 @@ require (
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
-	github.com/charmbracelet/lipgloss v1.1.1-0.20250319133953-166f707985bc // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect

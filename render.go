@@ -23,28 +23,28 @@ func colors(on bool) palette {
 	}
 }
 
-// truncate and the pad helpers count runes, not bytes, so multibyte titles
-// never get sliced mid-character.
+// truncate and the pad helpers count display cells, not bytes or runes, so
+// multibyte and double-width (CJK, emoji) titles neither get sliced mid-character
+// nor throw off column alignment.
 func truncate(s string, w int) string {
-	r := []rune(s)
-	if len(r) <= w {
+	if runewidth.StringWidth(s) <= w {
 		return s
 	}
 	if w <= 1 {
-		return string(r[:max(w, 0)])
+		return runewidth.Truncate(s, max(w, 0), "")
 	}
-	return string(r[:w-1]) + "…"
+	return runewidth.Truncate(s, w, "…")
 }
 
 func padRight(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - runewidth.StringWidth(s); n > 0 {
 		return s + strings.Repeat(" ", n)
 	}
 	return s
 }
 
 func padLeft(s string, w int) string {
-	if n := w - len([]rune(s)); n > 0 {
+	if n := w - runewidth.StringWidth(s); n > 0 {
 		return strings.Repeat(" ", n) + s
 	}
 	return s
@@ -93,23 +93,17 @@ func idleField(r Row, p palette) string {
 	return idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", idleW) + p.z
 }
 
-// heading renders "Name (N) icon" in the category color, followed by a dim
-// description when the terminal is wide enough to show it without wrapping.
-func heading(tier int, counts []int, mergedShown, width int, p palette) string {
+// headTitle is the plain panel title: "Name (N) icon".
+func headTitle(tier int, counts []int, mergedShown int) string {
 	if tier < 0 || tier >= len(categories) {
-		return p.b + p.d + "?" + p.z
+		return "?"
 	}
-	c := categories[tier]
 	count := counts[tier]
 	if tier == tierMerged {
 		count = mergedShown
 	}
-	title := fmt.Sprintf("%s (%d) %s", c.name, count, c.icon)
-	out := p.b + c.color(p) + title + p.z
-	if runewidth.StringWidth(title)+2+runewidth.StringWidth(c.desc) <= width {
-		out += "  " + p.d + c.desc + p.z
-	}
-	return out
+	c := categories[tier]
+	return fmt.Sprintf("%s (%d) %s", c.name, count, c.icon)
 }
 
 // renderTerminal produces the aligned, grouped table. mergedTotal is the real
@@ -142,7 +136,8 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
 	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
 	statusW := statusWidth(rows)
-	prefixW := 1 + numW + 2 + statusW + 2 + idleW + 2
+	contentW := width - panelOverhead
+	prefixW := numW + 2 + statusW + 2 + idleW + 2
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -151,18 +146,18 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 			t += " (" + strconv.Itoa(r.Comments) + ")"
 		}
 		titles[i] = t
-		if n := len([]rune(t)); n > longest {
+		if n := runewidth.StringWidth(t); n > longest {
 			longest = n
 		}
-		if n := len([]rune(r.URL)); n > urlW {
+		if n := runewidth.StringWidth(r.URL); n > urlW {
 			urlW = n
 		}
-		if n := len([]rune(r.Repository)); n > longestRepo {
+		if n := runewidth.StringWidth(r.Repository); n > longestRepo {
 			longestRepo = n
 		}
 	}
 	repoW := longestRepo
-	titleW := width - prefixW - 2 - 3 - urlW - repoW
+	titleW := contentW - prefixW - 2 - 3 - urlW - repoW
 	if titleW > longest {
 		titleW = longest
 	}
@@ -172,13 +167,20 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 
 	var b strings.Builder
 	tier := -1
+	var border string
 	for i, r := range rows {
 		if r.Tier != tier {
 			if tier != -1 {
-				b.WriteString("\n")
+				b.WriteString(panelBottom(width, border, p) + "\n\n")
 			}
 			tier = r.Tier
-			b.WriteString(heading(tier, counts, mergedShown, width, p) + "\n")
+			desc := ""
+			border = p.d
+			if tier >= 0 && tier < len(categories) {
+				desc = categories[tier].desc
+				border = categories[tier].color(p)
+			}
+			b.WriteString(panelTop(headTitle(tier, counts, mergedShown), desc, width, border, p) + "\n")
 		}
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
@@ -188,9 +190,11 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		fmt.Fprintf(&b, " %s  %s  %s  %s  %s   %s\n",
-			num, status, idle, repo, title, url)
+		line := fmt.Sprintf("%s  %s  %s  %s  %s   %s", num, status, idle, repo, title, url)
+		plainW := prefixW + repoW + 2 + titleW + 3 + len([]rune(r.URL))
+		b.WriteString(panelLine(line, plainW, width, border, p) + "\n")
 	}
+	b.WriteString(panelBottom(width, border, p) + "\n")
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
 	return b.String()
