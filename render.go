@@ -199,13 +199,17 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 		}
 
 		mark := "  "
-		if v.cursor != "" && r.URL == v.cursor {
+		selected := v.cursor != "" && r.URL == v.cursor
+		if selected {
 			mark = p.b + p.c + "❯" + p.z + " "
 		}
 		if v.collapsed[tier] {
 			continue
 		}
 		title := padRight(truncate(titles[i], titleW), titleW)
+		if selected {
+			title = p.b + title + p.z
+		}
 		status := statusField(r, statusW, p)
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z

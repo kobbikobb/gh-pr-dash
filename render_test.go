@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -296,6 +297,21 @@ func TestPanelsWithView(t *testing.T) {
 
 		if strings.Count(out, "❯") != 1 || !strings.Contains(out, "❯ ✅ Ready") {
 			t.Errorf("cursor marker wrong:\n%s", out)
+		}
+	})
+
+	t.Run("should emphasise the selected title without breaking alignment", func(t *testing.T) {
+		out := renderPanels(rows, 100, true, 0, view{cursor: "https://x/2", interactive: true})
+
+		if !strings.Contains(out, "\033[1mFine") {
+			t.Errorf("selected title not bold:\n%s", out)
+		}
+		ansi := regexp.MustCompile("\x1b\\[[0-9;]*m")
+		for _, l := range strings.Split(out, "\n") {
+			plain := ansi.ReplaceAllString(l, "")
+			if strings.Contains(plain, "│") && runewidth.StringWidth(plain) != 100 {
+				t.Errorf("misaligned (%d): %q", runewidth.StringWidth(plain), plain)
+			}
 		}
 	})
 
