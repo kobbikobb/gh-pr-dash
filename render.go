@@ -108,7 +108,6 @@ func headTitle(tier int, counts []int, mergedShown int) string {
 
 // view is the interactive state a render needs: which row the cursor is on
 // (by URL, so it survives refreshes) and which categories are folded away.
-//
 type view struct {
 	cursor      string
 	collapsed   map[int]bool
