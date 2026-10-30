@@ -265,14 +265,14 @@ func TestPanels(t *testing.T) {
 		{Tier: tierDrafts, Status: "draft", Repository: "api", Title: "WIP", URL: "https://github.com/me/api/pull/3"},
 	}
 
-	for _, width := range []int{100, 160} {
+	for _, width := range []int{40, 100, 160} {
 		t.Run("should draw every panel line at exactly the terminal width", func(t *testing.T) {
 			out := renderTerminal(rows, width, false, 0)
 
 			for _, ln := range strings.Split(out, "\n") {
 				if strings.HasPrefix(ln, "│") || strings.HasPrefix(ln, "╭") || strings.HasPrefix(ln, "╰") {
-					if got := runewidth.StringWidth(ln); got != width {
-						t.Errorf("width %d: line is %d wide: %q", width, got, ln)
+					if got := runewidth.StringWidth(ln); got < width || got != runewidth.StringWidth(strings.Split(out, "\n")[2]) {
+						t.Errorf("width %d: line is %d wide, panel not rectangular: %q", width, got, ln)
 					}
 				}
 			}

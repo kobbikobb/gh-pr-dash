@@ -165,6 +165,10 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		titleW = 12
 	}
 
+	// The URL and the minimum title are never shrunk, so on a very narrow
+	// terminal the panel grows to fit its rows rather than mis-aligning borders.
+	width = max(width, panelOverhead+prefixW+repoW+2+titleW+3+urlW)
+
 	var b strings.Builder
 	tier := -1
 	var border string
