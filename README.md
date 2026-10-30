@@ -26,7 +26,7 @@ Ready to merge (1) ✅  Approved, passing checks, clean, not blocked
   ✓ clean    clean        2d api   Validate regulator config on save (1)       https://github.com/me/api/pull/12385
 ```
 
-Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
 
 ## Install
 

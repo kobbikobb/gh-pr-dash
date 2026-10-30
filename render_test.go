@@ -20,6 +20,12 @@ func TestTruncate(t *testing.T) {
 		}
 	})
 
+	t.Run("should not exceed the width for double-width characters", func(t *testing.T) {
+		if got := truncate("日本語日本語", 7); runewidth.StringWidth(got) > 7 {
+			t.Errorf("got %q (%d cells), want at most 7", got, runewidth.StringWidth(got))
+		}
+	})
+
 	t.Run("should leave short strings unchanged", func(t *testing.T) {
 		if got := truncate("short", 20); got != "short" {
 			t.Errorf("got %q", got)
@@ -82,7 +88,7 @@ func TestRenderTerminal(t *testing.T) {
 	t.Run("should end each heading with its icon and describe the category when wide", func(t *testing.T) {
 		out := renderTerminal([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 160, false, 12)
 
-		if !strings.Contains(out, "Merged today (12) 🎉  Merged since midnight\n") {
+		if !strings.Contains(out, "╭─ Merged today (12) 🎉 ─ Merged since midnight ─") {
 			t.Errorf("heading should read name, count, icon, description:\n%s", out)
 		}
 	})
@@ -248,6 +254,36 @@ func TestStatusColumn(t *testing.T) {
 			if got := runewidth.StringWidth(statusField(r, w, colors(false))); got != w {
 				t.Errorf("%s: width %d, want %d", r.Status, got, w)
 			}
+		}
+	})
+}
+
+func TestPanels(t *testing.T) {
+	rows := []Row{
+		{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "Fix 日本語 title", URL: "https://github.com/me/api/pull/1"},
+		{Tier: tierNeedsAction, Status: "comments", Repository: "web", Title: "Short", URL: "https://github.com/me/web/pull/22"},
+		{Tier: tierDrafts, Status: "draft", Repository: "api", Title: "WIP", URL: "https://github.com/me/api/pull/3"},
+	}
+
+	for _, width := range []int{40, 100, 160} {
+		t.Run("should draw every panel line at exactly the terminal width", func(t *testing.T) {
+			out := renderTerminal(rows, width, false, 0)
+
+			for _, ln := range strings.Split(out, "\n") {
+				if strings.HasPrefix(ln, "│") || strings.HasPrefix(ln, "╭") || strings.HasPrefix(ln, "╰") {
+					if got := runewidth.StringWidth(ln); got < width || got != runewidth.StringWidth(strings.Split(out, "\n")[2]) {
+						t.Errorf("width %d: line is %d wide, panel not rectangular: %q", width, got, ln)
+					}
+				}
+			}
+		})
+	}
+
+	t.Run("should draw one panel per non-empty tier", func(t *testing.T) {
+		out := renderTerminal(rows, 100, false, 0)
+
+		if n := strings.Count(out, "╭"); n != 2 {
+			t.Errorf("got %d panels, want 2:\n%s", n, out)
 		}
 	})
 }
