@@ -31,7 +31,7 @@ Flat `package main`, one concern per file. Pipeline: **fetch → classify/rank �
 - `panel.go` — bordered category panel helpers (top border with title + description, side-bordered lines, bottom). Padding is plain spaces computed from display width, before any color.
 - `render.go` — terminal table rendering. Status stored as stable codes (ci: ok/fail/pending/none, merge: clean/conflict/unknown, review: approved/changes/review/none), styled here.
 - `theme.go` — per-category presentation (name, description, emoji, heading color), indexed by tier and kept in tier order; also the `statuses` table (icon, label, color per `Status` code) and the status cell helpers.
-- `header.go` — ASCII-art box header, static and animated (watch) variants.
+- `header.go` — ASCII-art box header, static and animated (watch) variants; in watch the box's last line shows scope (org/repo) on the left and clock + refresh countdown on the right (`headerInfo`).
 - `watch.go` — `--watch` Bubble Tea model: single `Update` loop, 1-min data ticker + 200ms animation ticker, cursor model (cursor tracked by PR URL, `o`/`m`/`a` on the selection, capitals on its whole category, `1-7` jump, `enter` fold; fetch results are held only while a merge is being confirmed or running).
 - `actions.go` — side effects (open browser, deliver to agent/clipboard); each returns what actually happened so the status line never claims success it didn't get.
 
