@@ -14,18 +14,19 @@ type category struct {
 	desc  string
 	icon  string
 	color func(palette) string
+	agent string // prompt prefix when the whole category is sent to an agent
 }
 
 // Icons are emoji that are two cells wide without a variation selector, so
 // terminals agree on their width.
 var categories = []category{
-	{"Needs action", "PRs with failing checks, conflicts, comments or a rejected queue entry", "🚨", func(p palette) string { return p.r }},
-	{"Ready to merge", "Approved, passing checks, clean, not blocked", "✅", func(p palette) string { return p.g }},
-	{"In progress", "Approved, but CI pending or running, or in the merge queue", "⏳", func(p palette) string { return p.y }},
-	{"Needs reviewer", "Nobody asked for or reviewed yet", "🙋", func(p palette) string { return p.y }},
-	{"In review", "Reviewer requested, reviewed but not approved", "👀", func(p palette) string { return p.c }},
-	{"Drafts", "Draft PRs, any CI state", "📝", func(p palette) string { return p.d }},
-	{"Merged today", "Merged since midnight", "🎉", func(p palette) string { return p.d }},
+	{"Needs action", "PRs with failing checks, conflicts, comments or a rejected queue entry", "🚨", func(p palette) string { return p.r }, "Please review and take action on PRs that need attention (CI failures, conflicts, unresolved comments):"},
+	{"Ready to merge", "Approved, passing checks, clean, not blocked", "✅", func(p palette) string { return p.g }, "Please review and merge ready PRs (approved, green, no conflicts):"},
+	{"In progress", "Approved, but CI pending or running, or in the merge queue", "⏳", func(p palette) string { return p.y }, "Please monitor PRs waiting on CI or in the merge queue:"},
+	{"Needs reviewer", "Nobody asked for or reviewed yet", "🙋", func(p palette) string { return p.y }, "Please find reviewers for PRs with no reviewer:"},
+	{"In review", "Reviewer requested, reviewed but not approved", "👀", func(p palette) string { return p.c }, "Please review PRs waiting for review:"},
+	{"Drafts", "Draft PRs, any CI state", "📝", func(p palette) string { return p.d }, "Please review draft PRs:"},
+	{"Merged today", "Merged since midnight", "🎉", func(p palette) string { return p.d }, "Please summarize recently merged PRs:"},
 }
 
 // statusInfo is how one Row.Status code is shown: emoji, short label, color.

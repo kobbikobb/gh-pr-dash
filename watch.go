@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -45,58 +44,18 @@ type (
 	}
 )
 
-// group is a set of PRs an action can target with one key. The label starts
-// with the key so the hint can render it as "[k]ey". allOpen selects every
-// PR that isn't merged.
-type group struct {
-	key, label string
-	tier       int
-	header     string // agent prompt for this group
-}
-
-const allOpen = -1
-
-var groups = []group{
-	{"n", "needs", tierNeedsAction, "Please review and take action on PRs that need attention (CI failures, conflicts, unresolved comments):"},
-	{"r", "ready", tierReady, "Please review and merge ready PRs (approved, green, no conflicts):"},
-	{"c", "ci", tierBuilding, "Please monitor PRs waiting on CI or in the merge queue:"},
-	{"u", "unassigned", tierNoReviewer, "Please find reviewers for PRs with no reviewer:"},
-	{"w", "waiting", tierWaiting, "Please review PRs waiting for review:"},
-	{"d", "drafts", tierDrafts, "Please review draft PRs:"},
-	{"t", "today", tierMerged, "Please summarize recently merged PRs:"},
-	{"a", "all", allOpen, "Please review all open PRs:"},
-}
-
 const targetHeader = "Please review and take action on these PRs:"
 
-func findGroup(key string) (group, bool) {
-	for _, g := range groups {
-		if g.key == key {
-			return g, true
-		}
-	}
-	return group{}, false
-}
-
-func (g group) pick(rows []Row) []Row {
+// inTier picks the rows of one category.
+func inTier(rows []Row, tier int) []Row {
 	var out []Row
 	for _, r := range rows {
-		if g.tier == allOpen && r.Tier != tierMerged || r.Tier == g.tier {
+		if r.Tier == tier {
 			out = append(out, r)
 		}
 	}
 	return out
 }
-
-func groupHint() string {
-	parts := make([]string, len(groups))
-	for i, g := range groups {
-		parts[i] = "[" + g.key + "]" + g.label[1:]
-	}
-	return strings.Join(parts, " ")
-}
-
-var actionNames = map[rune]string{'o': "open", 'm': "merge", 'x': "agent"}
 
 type watchModel struct {
 	opts          options
@@ -112,10 +71,12 @@ type watchModel struct {
 	gen      int       // bumped after a merge; fetches from an older gen are stale
 	deferred *fetchMsg // result held back while the user is mid-action
 
-	action  rune   // pending action key (o/m/x) awaiting a target
-	input   string // typed PR numbers for the pending action
-	confirm []Row  // PRs awaiting y/n confirmation to merge
-	skipped int    // targets left out of the merge because they aren't ready
+	cursor    string       // URL of the selected PR, so it survives refreshes
+	lastIdx   int          // cursor position before the last refresh, for re-seating it
+	collapsed map[int]bool // categories folded to just their border
+	help      bool
+
+	confirm []Row // PRs awaiting y/n confirmation to merge
 	merging bool
 	status  string // result of the last action; may span lines
 }
@@ -123,6 +84,7 @@ type watchModel struct {
 func newWatchModel(opts options) watchModel {
 	return watchModel{
 		opts:        opts,
+		collapsed:   map[int]bool{},
 		useColor:    detectTerminal().useColor,
 		nextRefresh: time.Now().Add(opts.interval),
 	}
@@ -148,10 +110,10 @@ func (m watchModel) Init() tea.Cmd {
 	return tea.Batch(m.fetchCmd(), animTick(), m.dataTick())
 }
 
-// busy is true while the user is typing a target, confirming, or a merge runs.
-// Fetch results are held back then so row numbers don't shift under the user.
+// busy is true while the user is confirming or a merge runs. Fetch results are
+// held back then so the list being confirmed doesn't change under the user.
 func (m watchModel) busy() bool {
-	return m.action != 0 || m.confirm != nil || m.merging
+	return m.confirm != nil || m.merging
 }
 
 func (m watchModel) applyFetch(msg fetchMsg) watchModel {
@@ -161,7 +123,7 @@ func (m watchModel) applyFetch(msg fetchMsg) watchModel {
 	}
 	m.rows, m.mergedTotal, m.errMsg = msg.rows, msg.mergedTotal, ""
 	m.lastFetch = time.Now()
-	return m
+	return m.fixCursor()
 }
 
 func (m watchModel) settle() watchModel {
@@ -207,36 +169,37 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m watchModel) key(msg tea.KeyMsg) (watchModel, tea.Cmd) {
 	if msg.Paste {
-		// Pasted text is only ever target numbers; it must never trigger an
-		// action, a group, or a confirmation.
-		text := strings.NewReplacer("\r", "", "\n", "").Replace(string(msg.Runes))
-		if m.action != 0 && m.confirm == nil && !m.merging && isTargetText(text) {
-			m.input += text
-		}
-		return m, nil
+		return m, nil // pasted text must never trigger an action or confirmation
 	}
 	k := msg.String()
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
-	rows := filterRows(m.rows, m.opts.repo)
 
 	switch {
 	case m.merging:
 		return m, nil
 	case m.confirm != nil:
 		return m.keyConfirm(k)
-	case m.action != 0:
-		return m.keyTarget(k, rows)
 	}
 
 	switch k {
 	case "q":
 		return m, tea.Quit
-	case "o", "m", "x":
-		m.action, m.input, m.status = rune(k[0]), "", ""
-	case "s":
-		m.status = "slack: not implemented"
+	case "esc":
+		m.help, m.status = false, ""
+	case "?":
+		m.help = !m.help
+	case "up", "k":
+		return m.move(-1), nil
+	case "down", "j":
+		return m.move(1), nil
+	case "enter":
+		return m.toggleCollapse(), nil
+	case "1", "2", "3", "4", "5", "6", "7":
+		return m.jump(int(k[0] - '1')), nil
+	case "o", "m", "a", "O", "M", "A":
+		return m.act(k)
 	}
 	return m, nil
 }
@@ -245,90 +208,141 @@ func (m watchModel) keyConfirm(k string) (watchModel, tea.Cmd) {
 	switch k {
 	case "y", "Y":
 		pending := m.confirm
-		m.confirm, m.skipped, m.merging = nil, 0, true
+		m.confirm, m.merging = nil, true
 		m.status = fmt.Sprintf("merging %d PR(s)…", len(pending))
 		return m, mergeCmd(pending)
 	case "n", "N", "esc":
-		m.confirm, m.skipped = nil, 0
+		m.confirm = nil
 		m.status = "merge cancelled"
 	}
 	return m, nil
 }
 
-// keyTarget collects the target of a pending action: PR numbers (1,3 5)
-// confirmed with Enter, or a group key that applies to the whole group.
-func (m watchModel) keyTarget(k string, rows []Row) (watchModel, tea.Cmd) {
-	switch {
-	case k == "esc":
-		m.action, m.input = 0, ""
-	case k == "backspace":
-		if m.input != "" {
-			m.input = m.input[:len(m.input)-1]
-		}
-	case k == "enter":
-		return m.run(parseTargets(m.input, rows), group{})
-	case isTargetText(k):
-		m.input += k
-	case m.input == "":
-		if g, ok := findGroup(k); ok {
-			return m.run(g.pick(rows), g)
-		}
-	}
-	return m, nil
-}
-
-// isTargetText accepts digits, commas and spaces, including pasted runs.
-func isTargetText(k string) bool {
-	if k == "" {
-		return false
-	}
-	for _, c := range k {
-		if (c < '0' || c > '9') && c != ',' && c != ' ' {
-			return false
-		}
-	}
-	return true
-}
-
-// parseTargets resolves "1,3 5" against the displayed row numbers, ignoring
-// anything out of range or repeated.
-func parseTargets(input string, rows []Row) []Row {
+// shown is the rows in display order, minus the ones in folded categories.
+func (m watchModel) shown() []Row {
 	var out []Row
-	seen := map[int]bool{}
-	for _, tok := range strings.FieldsFunc(input, func(r rune) bool { return r == ',' || r == ' ' }) {
-		n, err := strconv.Atoi(tok)
-		if err != nil || n < 1 || n > len(rows) || seen[n] {
-			continue
+	for _, r := range filterRows(m.rows, m.opts.repo) {
+		if !m.collapsed[r.Tier] {
+			out = append(out, r)
 		}
-		seen[n] = true
-		out = append(out, rows[n-1])
 	}
 	return out
 }
 
-func (m watchModel) run(targets []Row, g group) (watchModel, tea.Cmd) {
-	action := m.action
-	m.action, m.input = 0, ""
-	if len(targets) == 0 {
-		m.status = "no matching PRs"
+func indexOfURL(rows []Row, url string) int {
+	for i, r := range rows {
+		if r.URL == url {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m watchModel) selected() (Row, bool) {
+	shown := m.shown()
+	if i := indexOfURL(shown, m.cursor); i >= 0 {
+		return shown[i], true
+	}
+	return Row{}, false
+}
+
+// fixCursor keeps the cursor on the same PR after rows change. If that PR is
+// gone, it lands on whatever now sits at the same position.
+func (m watchModel) fixCursor() watchModel {
+	shown := m.shown()
+	if len(shown) == 0 {
+		m.cursor = ""
+		return m
+	}
+	if i := indexOfURL(shown, m.cursor); i >= 0 {
+		m.lastIdx = i
+		return m
+	}
+	m.lastIdx = min(m.lastIdx, len(shown)-1)
+	m.cursor = shown[m.lastIdx].URL
+	return m
+}
+
+func (m watchModel) move(delta int) watchModel {
+	shown := m.shown()
+	if len(shown) == 0 {
+		return m
+	}
+	i := indexOfURL(shown, m.cursor)
+	if i < 0 {
+		i = 0
+	} else {
+		i = min(max(i+delta, 0), len(shown)-1)
+	}
+	m.cursor, m.lastIdx = shown[i].URL, i
+	return m
+}
+
+// jump moves to the first PR of a category, unfolding it if needed.
+func (m watchModel) jump(tier int) watchModel {
+	rows := inTier(filterRows(m.rows, m.opts.repo), tier)
+	if len(rows) == 0 {
+		m.status = "no PRs in " + categories[tier].name
+		return m
+	}
+	m.status = ""
+	m.collapsed[tier] = false
+	m.cursor = rows[0].URL
+	return m.fixCursor()
+}
+
+// toggleCollapse folds or unfolds the cursor's category. A folded category has
+// no selectable rows, so the cursor moves to the nearest visible one; unfold it
+// again with its number key.
+func (m watchModel) toggleCollapse() watchModel {
+	sel, ok := m.selected()
+	if !ok {
+		return m
+	}
+	m.collapsed[sel.Tier] = true
+	rows := filterRows(m.rows, m.opts.repo)
+	target := ""
+	for _, r := range rows {
+		if m.collapsed[r.Tier] {
+			continue
+		}
+		target = r.URL
+		if r.Tier > sel.Tier {
+			break
+		}
+	}
+	if target == "" {
+		m.collapsed[sel.Tier] = false // nothing else to land on
+		return m
+	}
+	m.cursor = target
+	return m.fixCursor()
+}
+
+// act runs an action on the selected PR (lowercase) or on every PR in its
+// category (uppercase).
+func (m watchModel) act(k string) (watchModel, tea.Cmd) {
+	sel, ok := m.selected()
+	if !ok {
+		m.status = "no PR selected"
 		return m, nil
 	}
+	m.status = ""
+	targets, header := []Row{sel}, targetHeader
+	if k == strings.ToUpper(k) {
+		targets, header = inTier(filterRows(m.rows, m.opts.repo), sel.Tier), categories[sel.Tier].agent
+	}
 
-	switch action {
-	case 'o':
+	switch strings.ToLower(k) {
+	case "o":
 		m.status = openStatus(targets)
-	case 'm':
-		ready := group{tier: tierReady}.pick(targets)
-		if len(ready) == 0 {
-			m.status = "nothing to merge: only ready PRs (approved, CI green, no conflicts) can be merged"
+	case "m":
+		if sel.Tier != tierReady {
+			m.status = "can't merge: only ready PRs (approved, CI green, no conflicts) can be merged"
 			return m, nil
 		}
-		m.confirm, m.skipped = ready, len(targets)-len(ready)
-	case 'x':
-		header := g.header
-		if header == "" {
-			header = targetHeader
-		}
+		m.confirm = targets
+	case "a":
 		how, err := deliverToAgent(agentMessage(header, targets))
 		if err != nil {
 			m.status = "agent failed: " + err.Error()
@@ -409,13 +423,8 @@ func mergeStatus(r mergeMsg) string {
 // footer is the bottom help/prompt block (one or more lines) for the current
 // input state.
 func (m watchModel) footer() string {
-	switch {
-	case m.confirm != nil:
-		head := fmt.Sprintf("Merge %d PR(s)?", len(m.confirm))
-		if m.skipped > 0 {
-			head += fmt.Sprintf(" (%d not ready, skipped)", m.skipped)
-		}
-		lines := []string{head}
+	if m.confirm != nil {
+		lines := []string{fmt.Sprintf("Merge %d PR(s)?", len(m.confirm))}
 		for i, r := range m.confirm {
 			if i == maxStatus+3 {
 				lines = append(lines, fmt.Sprintf("  … and %d more", len(m.confirm)-i))
@@ -424,14 +433,18 @@ func (m watchModel) footer() string {
 			lines = append(lines, "  "+r.Ref+"  "+r.Title)
 		}
 		return strings.Join(append(lines, "[y] merge · [n]/esc cancel"), "\n")
-	case m.action != 0:
-		hint := "numbers (1,3) + enter, or a group now: " + groupHint() + " · esc cancel"
-		if m.input != "" {
-			hint = "enter run · backspace edit · esc cancel"
-		}
-		return actionNames[m.action] + " › " + m.input + "▏\n" + hint
 	}
-	help := "[o]pen  [m]erge  [x] agent — then PR numbers + enter, or a group · [q] quit"
+	help := "[o] open  [m] merge  [a] agent  [↑↓] move  [1-7] go to category  [?] help  [q] quit"
+	if m.help {
+		help = strings.Join([]string{
+			"↑/↓ or j/k   move the cursor",
+			"1-7          jump to a category (unfolds it)",
+			"enter        fold / unfold the cursor's category",
+			"o  m  a      open / merge / send to agent: the selected PR",
+			"O  M  A      the same for every PR in the selected category",
+			"esc          clear this message · q quit",
+		}, "\n")
+	}
 	if m.status != "" {
 		return m.status + "\n" + help
 	}
@@ -443,7 +456,8 @@ func (m watchModel) View() string {
 		return ""
 	}
 	t := terminal{width: m.width, height: m.height, useColor: m.useColor}
-	return renderWatch(m.opts, m.tick, m.rows, m.mergedTotal, m.errMsg, refreshStatus(m.lastFetch, m.nextRefresh), m.footer(), t)
+	return renderWatch(m.opts, m.tick, m.rows, m.mergedTotal, m.errMsg, refreshStatus(m.lastFetch, m.nextRefresh), m.footer(), t,
+		view{cursor: m.cursor, collapsed: m.collapsed, interactive: true})
 }
 
 func refreshStatus(lastFetch, nextRefresh time.Time) string {
@@ -457,7 +471,7 @@ func refreshStatus(lastFetch, nextRefresh time.Time) string {
 	return fmt.Sprintf("refreshed %s · next %ds", lastFetch.Format("15:04"), secs)
 }
 
-func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, status, footer string, t terminal) string {
+func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, status, footer string, t terminal, v view) string {
 	p := colors(t.useColor)
 	m := gutter(t.width)
 	inner := t.width - 2*m
@@ -480,7 +494,7 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		if opts.repo != "" {
 			total = 0
 		}
-		out += renderTerminal(filtered, inner, t.useColor, total)
+		out += renderPanels(filtered, inner, t.useColor, total, v)
 	}
 
 	footLines := strings.Split(footer, "\n")
@@ -491,7 +505,15 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 	// Keep the footer visible on short terminals by clipping the body instead.
 	body := strings.Split(indent(out, m), "\n")
 	if keep := t.height - len(footLines); keep > 0 && len(body) > keep {
-		body = body[:keep]
+		// Scroll just far enough that the cursor row stays on screen.
+		start := 0
+		for i, ln := range body {
+			if strings.Contains(ln, "❯") {
+				start = max(i-keep+1, 0)
+				break
+			}
+		}
+		body = body[start : start+keep]
 	}
 	return strings.Join(body, "\n") + "\n" + indent(strings.Join(footLines, "\n"), m)
 }

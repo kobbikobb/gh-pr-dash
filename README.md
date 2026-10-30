@@ -48,17 +48,21 @@ gh pr-dash --watch       # interactive dashboard, refreshes every minute
 
 ### Watch mode keys
 
-Pick an action, then a target. Nothing happens on a bare number.
+A cursor (`❯`) marks the selected PR. Lowercase keys act on it; the capital version acts on every PR in its category.
 
 | Key | Action |
 |---|---|
-| `o` | open PRs in the browser (max 10 at once) |
-| `m` | merge — only **ready** PRs; lists them and waits for `y` |
-| `x` | send PRs to an agent |
-| `s` | Slack — not implemented |
+| `↑` `↓` / `k` `j` | move the cursor |
+| `1`–`7` | jump to a category (unfolds it if folded) |
+| `enter` | fold the cursor's category to just its border |
+| `o` / `O` | open the PR / the whole category in the browser (max 10 at once) |
+| `m` / `M` | merge — only **ready** PRs; lists them and waits for `y` |
+| `a` / `A` | send the PR / the whole category to an agent |
+| `?` | show help |
+| `esc` | clear the status line or help |
 | `q` | quit |
 
-Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI / queue, `u` needs reviewer, `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
+Refreshes pause while a merge is awaiting confirmation. The cursor follows its PR across refreshes.
 
 Environment:
 
