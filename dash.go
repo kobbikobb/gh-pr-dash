@@ -40,11 +40,13 @@ type terminal struct {
 	width    int
 	height   int
 	useColor bool
+	isTTY    bool
 }
 
 func detectTerminal() terminal {
 	fd := int(os.Stdout.Fd())
-	useColor := os.Getenv("NO_COLOR") == "" && term.IsTerminal(fd)
+	isTTY := term.IsTerminal(fd)
+	useColor := os.Getenv("NO_COLOR") == "" && isTTY
 	width, height := 120, 40
 	if w, h, err := term.GetSize(fd); err == nil && w > 0 {
 		width = w
@@ -52,7 +54,7 @@ func detectTerminal() terminal {
 			height = h
 		}
 	}
-	return terminal{width: width, height: height, useColor: useColor}
+	return terminal{width: width, height: height, useColor: useColor, isTTY: isTTY}
 }
 
 func fetchPRs(query string, limit int) ([]ghPR, int, error) {
@@ -112,34 +114,17 @@ func fetchRows(opts options, now time.Time) ([]Row, int, error) {
 	return rows, mergedToday, nil
 }
 
-func fetchAndRender(w io.Writer, opts options) error {
-	rows, mergedTotal, err := fetchRows(opts, time.Now())
+// printJSON fetches once and writes the ranked rows as a JSON array.
+func printJSON(w io.Writer, opts options) error {
+	rows, _, err := fetchRows(opts, time.Now())
 	if err != nil {
 		return err
 	}
-
-	if opts.asJSON {
-		out, err := json.Marshal(rows)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(out))
+	out, err := json.Marshal(rows)
+	if err != nil {
 		return err
 	}
-
-	t := detectTerminal()
-	m := gutter(t.width)
-	inner := t.width - 2*m
-	header := renderHeader(0, opts.watch, t.useColor, inner, t.height, headerInfo{})
-	filtered := filterRows(rows, opts.repo)
-	if opts.repo != "" && len(filtered) == 0 {
-		fmt.Fprintf(os.Stderr, "warning: --repo %q matched no PRs\n", opts.repo)
-	}
-	total := mergedTotal
-	if opts.repo != "" {
-		total = 0
-	}
-	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor, total), m))
+	_, err = fmt.Fprintln(w, string(out))
 	return err
 }
 

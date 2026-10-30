@@ -11,13 +11,12 @@ import (
 
 const usage = `gh pr-dash — rank your open PRs by what needs action
 
-Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [--watch] [--interval <dur>] [max]
+Usage: gh pr-dash [--org <name>] [--repo <name>] [--json] [--interval <dur>] [max]
 
   --org <name>       Scope to a single org/owner
   --repo <name>      Scope to a single repo
-  --json             Emit raw JSON rows (for scripts)
-  --watch            Refresh on an interval
-  --interval <dur>   Watch refresh interval, e.g. 30s, 2m (default 1m)
+  --json             Print raw JSON rows once and exit (for scripts)
+  --interval <dur>   Refresh interval, e.g. 30s, 2m (default 1m)
   max                Max PRs to fetch (default 100)
 `
 
@@ -26,7 +25,6 @@ type options struct {
 	repo     string
 	limit    int
 	asJSON   bool
-	watch    bool
 	interval time.Duration
 }
 
@@ -54,7 +52,7 @@ func parseArgs(args []string) (options, bool) {
 		case "--json":
 			o.asJSON = true
 		case "--watch":
-			o.watch = true
+			// The dashboard is always live now; accepted so old aliases keep working.
 		case "-h", "--help":
 			return o, false
 		default:
@@ -70,10 +68,6 @@ func parseArgs(args []string) (options, bool) {
 			o.limit = n
 		}
 	}
-	if o.watch && o.asJSON {
-		fmt.Fprintln(os.Stderr, "--watch and --json cannot be combined")
-		return o, false
-	}
 	return o, true
 }
 
@@ -84,13 +78,17 @@ func main() {
 		return
 	}
 
-	if opts.watch {
-		watchLoop(opts)
+	if opts.asJSON {
+		if err := printJSON(os.Stdout, opts); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 		return
 	}
 
-	if err := fetchAndRender(os.Stdout, opts); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+	if !detectTerminal().isTTY {
+		fmt.Fprintln(os.Stderr, "error: gh pr-dash is an interactive dashboard and needs a terminal; use --json for scripts")
 		os.Exit(1)
 	}
+	watchLoop(opts)
 }

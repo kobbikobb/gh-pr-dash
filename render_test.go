@@ -54,7 +54,7 @@ func TestRenderTerminal(t *testing.T) {
 	}
 
 	t.Run("should group rows under tier headings", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, 0)
+		out := renderPanels(rows, 100, false, 0, view{})
 
 		if !strings.Contains(out, "Needs action") || !strings.Contains(out, "Ready to merge") {
 			t.Errorf("missing tier headings:\n%s", out)
@@ -62,7 +62,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show comment count when nonzero", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, 0)
+		out := renderPanels(rows, 100, false, 0, view{})
 
 		if !strings.Contains(out, "(3)") {
 			t.Errorf("missing comment count:\n%s", out)
@@ -70,7 +70,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
-		out := renderTerminal(rows, 200, false, 0)
+		out := renderPanels(rows, 200, false, 0, view{})
 
 		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
 			t.Errorf("missing PR url:\n%s", out)
@@ -78,7 +78,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should group PRs nobody was asked to review under Needs reviewer", func(t *testing.T) {
-		out := renderTerminal([]Row{{Tier: tierNoReviewer, CI: "ok", Merge: "clean", URL: "https://x/1"}}, 100, false, 0)
+		out := renderPanels([]Row{{Tier: tierNoReviewer, CI: "ok", Merge: "clean", URL: "https://x/1"}}, 100, false, 0, view{})
 
 		if !strings.Contains(out, "Needs reviewer (1)") || !strings.Contains(out, "1 need reviewer") {
 			t.Errorf("missing needs-reviewer heading or count:\n%s", out)
@@ -86,7 +86,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should end each heading with its icon and describe the category when wide", func(t *testing.T) {
-		out := renderTerminal([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 160, false, 12)
+		out := renderPanels([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 160, false, 12, view{})
 
 		if !strings.Contains(out, "╭─ Merged today (12) 🎉 ─ Merged since midnight ─") {
 			t.Errorf("heading should read name, count, icon, description:\n%s", out)
@@ -94,7 +94,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should drop the description when the terminal is too narrow for it", func(t *testing.T) {
-		out := renderTerminal([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 30, false, 0)
+		out := renderPanels([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 30, false, 0, view{})
 
 		if strings.Contains(out, "Merged since midnight") {
 			t.Errorf("description should be dropped on narrow width:\n%s", out)
@@ -108,7 +108,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, 0)
+		out := renderPanels(rows, 100, false, 0, view{})
 
 		if strings.Contains(out, "\033") {
 			t.Errorf("found ANSI escape with color off:\n%q", out)
@@ -116,7 +116,7 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should emit ANSI escapes when color is on", func(t *testing.T) {
-		out := renderTerminal(rows, 100, true, 0)
+		out := renderPanels(rows, 100, true, 0, view{})
 
 		if !strings.Contains(out, "\033[") {
 			t.Error("expected ANSI escapes with color on")
@@ -129,7 +129,7 @@ func TestRenderTerminal(t *testing.T) {
 			{Tier: tierMerged, CI: "none", Merge: "merged", Review: "none", URL: "https://x/2"},
 		}
 
-		out := renderTerminal(mixed, 120, false, 0)
+		out := renderPanels(mixed, 120, false, 0, view{})
 
 		if !strings.Contains(out, "Merged today") || !strings.Contains(out, "merged") {
 			t.Errorf("missing merged section:\n%s", out)
@@ -146,7 +146,7 @@ func TestRenderTerminal(t *testing.T) {
 			{Tier: tierMerged, Merge: "merged", MergedAt: &mergedAt, URL: "https://x/2"},
 		}
 
-		out := renderTerminal(mixed, 120, false, 0)
+		out := renderPanels(mixed, 120, false, 0, view{})
 
 		want := mergedAt.Local().Format("15:04")
 		if !strings.Contains(out, want) {
@@ -159,7 +159,7 @@ func TestRenderTerminal(t *testing.T) {
 			{Tier: tierMerged, Merge: "merged", URL: "https://x/2"},
 		}
 
-		out := renderTerminal(mixed, 120, false, 12)
+		out := renderPanels(mixed, 120, false, 12, view{})
 
 		if !strings.Contains(out, "Merged today (12)") {
 			t.Errorf("heading should show total 12:\n%s", out)
@@ -167,26 +167,26 @@ func TestRenderTerminal(t *testing.T) {
 	})
 
 	t.Run("should report empty state", func(t *testing.T) {
-		if got := renderTerminal(nil, 100, false, 0); !strings.Contains(got, "No open PRs") {
+		if got := renderPanels(nil, 100, false, 0, view{}); !strings.Contains(got, "No open PRs") {
 			t.Errorf("got %q", got)
 		}
 	})
 }
 
 func TestRenderHeader(t *testing.T) {
-	t.Run("should render static header box with wordmark", func(t *testing.T) {
-		out := renderHeader(0, false, false, 60, 40, headerInfo{})
+	t.Run("should render the header box with wordmark", func(t *testing.T) {
+		out := renderHeader(0, false, 60, 40, headerInfo{})
 
 		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
 			t.Errorf("missing box:\n%s", out)
 		}
-		if !strings.Contains(out, "███") || !strings.Contains(out, appName) {
+		if !strings.Contains(out, "███") {
 			t.Errorf("missing wordmark:\n%s", out)
 		}
 	})
 
 	t.Run("should show scope on the left and clock and countdown on the right under watch", func(t *testing.T) {
-		out := renderHeader(0, true, false, 70, 40, headerInfo{left: "acme", right: "15:04:05 · next refresh in 42s"})
+		out := renderHeader(0, false, 70, 40, headerInfo{left: "acme", right: "15:04:05 · next refresh in 42s"})
 
 		if !strings.Contains(out, "acme") || !strings.Contains(out, "next refresh in 42s") {
 			t.Errorf("missing scope or refresh status:\n%s", out)
@@ -199,7 +199,7 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should fill the top border to the exact terminal width", func(t *testing.T) {
-		out := renderHeader(0, true, false, 72, 40, headerInfo{})
+		out := renderHeader(0, false, 72, 40, headerInfo{})
 
 		bar := strings.SplitN(out, "\n", 2)[0]
 
@@ -209,7 +209,7 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should collapse to a one-line bar on short terminals", func(t *testing.T) {
-		out := renderHeader(0, false, false, 80, 10, headerInfo{})
+		out := renderHeader(0, false, 80, 10, headerInfo{})
 
 		if strings.Contains(out, "╔") || strings.Contains(out, "███") {
 			t.Errorf("box should collapse on short height:\n%s", out)
@@ -220,8 +220,8 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should animate the wordmark colors on each tick", func(t *testing.T) {
-		out0 := renderHeader(0, true, true, 60, 40, headerInfo{})
-		out1 := renderHeader(1, true, true, 60, 40, headerInfo{})
+		out0 := renderHeader(0, true, 60, 40, headerInfo{})
+		out1 := renderHeader(1, true, 60, 40, headerInfo{})
 
 		if out0 == out1 {
 			t.Error("header should change between ticks")
@@ -272,7 +272,7 @@ func TestPanels(t *testing.T) {
 
 	for _, width := range []int{40, 100, 160} {
 		t.Run("should draw every panel line at exactly the terminal width", func(t *testing.T) {
-			out := renderTerminal(rows, width, false, 0)
+			out := renderPanels(rows, width, false, 0, view{})
 
 			for _, ln := range strings.Split(out, "\n") {
 				if strings.HasPrefix(ln, "│") || strings.HasPrefix(ln, "╭") || strings.HasPrefix(ln, "╰") {
@@ -285,7 +285,7 @@ func TestPanels(t *testing.T) {
 	}
 
 	t.Run("should draw one panel per non-empty tier", func(t *testing.T) {
-		out := renderTerminal(rows, 100, false, 0)
+		out := renderPanels(rows, 100, false, 0, view{})
 
 		if n := strings.Count(out, "╭"); n != 2 {
 			t.Errorf("got %d panels, want 2:\n%s", n, out)
@@ -325,7 +325,7 @@ func TestHeaderInfoNeverOverflows(t *testing.T) {
 	info := headerInfo{left: "a-very-long-organisation/and-repo", right: "15:04:05 · next refresh in 30s"}
 
 	for _, tc := range []struct{ width, height int }{{40, 40}, {46, 40}, {60, 40}, {60, 10}, {30, 10}, {20, 10}} {
-		out := renderHeader(0, true, false, tc.width, tc.height, info)
+		out := renderHeader(0, false, tc.width, tc.height, info)
 
 		for _, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 			if ln == "" {
