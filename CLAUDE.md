@@ -38,7 +38,7 @@ Flat `package main`, one concern per file. Pipeline: **fetch → classify/rank �
 ### Conventions that matter
 
 - **`Row` holds status codes, not display strings** — renderers map codes → glyphs/colors. Keep display logic out of `pr.go`.
-- **Padding before color.** ANSI escapes must never count toward column width — pad the plain string, then wrap in color (see `renderTerminal`). Rune-count, not byte-count, for widths (`truncate`/`padRight`/`padLeft`).
+- **Padding before color.** ANSI escapes must never count toward column width — pad the plain string, then wrap in color (see `renderPanels`). Display-width (`go-runewidth`), not byte or rune count, for widths (`truncate`/`padRight`/`padLeft`).
 - **URLs stay plain text** so they remain cmd-clickable through tmux — never color or decorate the URL column.
 - `reviewCode` honors `latestOpinionatedReviews` as well as `reviewDecision`, because `reviewDecision` is empty in repos that don't *require* review.
 

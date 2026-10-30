@@ -15,18 +15,18 @@ reviews:
     - path: "render.go"
       instructions: >
         ANSI escapes must never count toward column width — pad plain string,
-        then wrap in color. Use rune-count not byte-count for widths.
+        then wrap in color. Use display-width (go-runewidth) for widths.
         URLs stay plain text (no color/decorate) so they remain cmd-clickable through tmux.
     - path: "dash.go"
       instructions: >
         detectTerminal handles width and NO_COLOR/TTY detection.
-        fetchAndRender orchestrates fetch -> build -> render for both JSON and terminal.
+        fetchRows fetches and ranks; printJSON is the one-shot --json output.
     - path: "header.go"
       instructions: >
-        ASCII-art box header, static and animated (watch) variants.
+        ASCII-art animated box header with scope and clock line.
     - path: "watch.go"
       instructions: >
-        --watch loop: 1-min data ticker + 200ms animation ticker, cursor-home redraw.
+        Bubble Tea dashboard (default mode): 1-min data ticker + 200ms animation ticker, cursor model.
   tools:
     ruff:
       enabled: false
