@@ -130,7 +130,7 @@ func fetchAndRender(w io.Writer, opts options) error {
 	t := detectTerminal()
 	m := gutter(t.width)
 	inner := t.width - 2*m
-	header := renderHeader(0, opts.watch, t.useColor, inner, t.height, "")
+	header := renderHeader(0, opts.watch, t.useColor, inner, t.height, headerInfo{})
 	filtered := filterRows(rows, opts.repo)
 	if opts.repo != "" && len(filtered) == 0 {
 		fmt.Fprintf(os.Stderr, "warning: --repo %q matched no PRs\n", opts.repo)

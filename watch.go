@@ -468,14 +468,32 @@ func refreshStatus(lastFetch, nextRefresh time.Time) string {
 	if secs < 0 {
 		secs = 0
 	}
-	return fmt.Sprintf("refreshed %s · next %ds", lastFetch.Format("15:04"), secs)
+	return fmt.Sprintf("next refresh in %ds", secs)
+}
+
+// scopeLabel names what the dashboard is showing: the org (or all orgs) and,
+// when set, the repo filter.
+func scopeLabel(opts options) string {
+	switch {
+	case opts.org != "" && opts.repo != "":
+		return opts.org + "/" + opts.repo
+	case opts.org != "":
+		return opts.org
+	case opts.repo != "":
+		return opts.repo
+	}
+	return "all orgs"
 }
 
 func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, status, footer string, t terminal, v view) string {
 	p := colors(t.useColor)
 	m := gutter(t.width)
 	inner := t.width - 2*m
-	out := renderHeader(tick, true, t.useColor, inner, t.height, status)
+	right := time.Now().Format("15:04:05")
+	if status != "" {
+		right += " · " + status
+	}
+	out := renderHeader(tick, true, t.useColor, inner, t.height, headerInfo{left: scopeLabel(opts), right: right})
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}

@@ -25,8 +25,8 @@ func TestRefreshStatus(t *testing.T) {
 
 		got := refreshStatus(now, now.Add(30*time.Second))
 
-		if !strings.Contains(got, "refreshed") || !strings.Contains(got, "next") {
-			t.Errorf("got %q, want refreshed/next", got)
+		if !strings.Contains(got, "next refresh in") {
+			t.Errorf("got %q, want a countdown", got)
 		}
 	})
 }
@@ -288,5 +288,22 @@ func TestCursorRowIsMarkedAndStaysVisible(t *testing.T) {
 
 	if !strings.Contains(out, "❯") {
 		t.Errorf("cursor row scrolled off a short terminal:\n%s", out)
+	}
+}
+
+func TestScopeLabel(t *testing.T) {
+	cases := []struct {
+		opts options
+		want string
+	}{
+		{options{}, "all orgs"},
+		{options{org: "acme"}, "acme"},
+		{options{org: "acme", repo: "api"}, "acme/api"},
+		{options{repo: "api"}, "api"},
+	}
+	for _, c := range cases {
+		if got := scopeLabel(c.opts); got != c.want {
+			t.Errorf("scopeLabel(%+v) = %q, want %q", c.opts, got, c.want)
+		}
 	}
 }

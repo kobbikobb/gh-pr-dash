@@ -175,7 +175,7 @@ func TestRenderTerminal(t *testing.T) {
 
 func TestRenderHeader(t *testing.T) {
 	t.Run("should render static header box with wordmark", func(t *testing.T) {
-		out := renderHeader(0, false, false, 60, 40, "")
+		out := renderHeader(0, false, false, 60, 40, headerInfo{})
 
 		if !strings.Contains(out, "╔") || !strings.Contains(out, "╝") {
 			t.Errorf("missing box:\n%s", out)
@@ -185,16 +185,21 @@ func TestRenderHeader(t *testing.T) {
 		}
 	})
 
-	t.Run("should render the refresh status under watch", func(t *testing.T) {
-		out := renderHeader(0, true, false, 60, 40, "refreshed 15:04 · next 42s")
+	t.Run("should show scope on the left and clock and countdown on the right under watch", func(t *testing.T) {
+		out := renderHeader(0, true, false, 70, 40, headerInfo{left: "acme", right: "15:04:05 · next refresh in 42s"})
 
-		if !strings.Contains(out, "next 42s") {
-			t.Errorf("missing refresh status:\n%s", out)
+		if !strings.Contains(out, "acme") || !strings.Contains(out, "next refresh in 42s") {
+			t.Errorf("missing scope or refresh status:\n%s", out)
+		}
+		for _, ln := range strings.Split(strings.TrimSpace(out), "\n") {
+			if got := runewidth.StringWidth(ln); got != 70 {
+				t.Errorf("header line is %d wide, want 70: %q", got, ln)
+			}
 		}
 	})
 
 	t.Run("should fill the top border to the exact terminal width", func(t *testing.T) {
-		out := renderHeader(0, true, false, 72, 40, "")
+		out := renderHeader(0, true, false, 72, 40, headerInfo{})
 
 		bar := strings.SplitN(out, "\n", 2)[0]
 
@@ -204,7 +209,7 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should collapse to a one-line bar on short terminals", func(t *testing.T) {
-		out := renderHeader(0, false, false, 80, 10, "")
+		out := renderHeader(0, false, false, 80, 10, headerInfo{})
 
 		if strings.Contains(out, "╔") || strings.Contains(out, "███") {
 			t.Errorf("box should collapse on short height:\n%s", out)
@@ -215,8 +220,8 @@ func TestRenderHeader(t *testing.T) {
 	})
 
 	t.Run("should animate the wordmark colors on each tick", func(t *testing.T) {
-		out0 := renderHeader(0, true, true, 60, 40, "")
-		out1 := renderHeader(1, true, true, 60, 40, "")
+		out0 := renderHeader(0, true, true, 60, 40, headerInfo{})
+		out1 := renderHeader(1, true, true, 60, 40, headerInfo{})
 
 		if out0 == out1 {
 			t.Error("header should change between ticks")
@@ -314,4 +319,21 @@ func TestPanelsWithView(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestHeaderInfoNeverOverflows(t *testing.T) {
+	info := headerInfo{left: "a-very-long-organisation/and-repo", right: "15:04:05 · next refresh in 30s"}
+
+	for _, tc := range []struct{ width, height int }{{40, 40}, {46, 40}, {60, 40}, {60, 10}, {30, 10}, {20, 10}} {
+		out := renderHeader(0, true, false, tc.width, tc.height, info)
+
+		for _, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+			if ln == "" {
+				continue
+			}
+			if got := runewidth.StringWidth(ln); got > tc.width {
+				t.Errorf("%dx%d: line is %d wide: %q", tc.width, tc.height, got, ln)
+			}
+		}
+	}
 }
