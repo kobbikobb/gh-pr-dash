@@ -7,9 +7,10 @@ import (
 )
 
 var tierNames = []string{
-	"Needs action — CI fail / conflict",
+	"Needs action — CI fail / conflict / comments",
 	"Ready to merge",
-	"Waiting on CI",
+	"Waiting on CI / queue",
+	"Needs reviewer",
 	"Waiting on review",
 	"Drafts",
 	"Merged today",
@@ -183,7 +184,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.c, p.d, p.d}
+	headColor := []string{p.r, p.g, p.y, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {
@@ -217,7 +218,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		fmt.Fprintf(&b, " %s  %s  %s  %s  %s  %s   %s\n",
 			num, ciGlyph(r.CI, p), merge, idle, repo, title, url)
 	}
-	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d merged%s\n",
-		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], mergedShown, p.z)
+	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
+		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
 	return b.String()
 }

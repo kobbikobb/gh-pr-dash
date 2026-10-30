@@ -58,7 +58,7 @@ Pick an action, then a target. Nothing happens on a bare number.
 | `s` | Slack — not implemented |
 | `q` | quit |
 
-Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI, `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
+Targets: PR numbers then Enter (`1,3 5`), or a group key straight after the action — `n` needs action, `r` ready, `c` CI / queue, `u` needs reviewer, `w` waiting, `d` drafts, `t` merged today, `a` all open. Esc cancels. Refreshes pause while you're mid-action so numbers don't shift.
 
 Environment:
 
@@ -67,13 +67,14 @@ Environment:
 
 ## Ranking
 
-Six tiers, most-stale-first within each:
+Seven tiers, most-stale-first within each:
 
 | Tier | Meaning |
 |---|---|
-| **Needs action** | CI failing or merge conflict |
-| **Ready to merge** | approved, CI green, no conflicts |
-| **Waiting on CI** | approved but CI still running |
+| **Needs action** | merge queue rejected it, CI failing, merge conflict, or unresolved review threads |
+| **Ready to merge** | approved (no review still required), CI green, no conflicts, not blocked by GitHub |
+| **Waiting on CI / queue** | approved but CI still running, or in the merge queue |
+| **Needs reviewer** | nobody asked to review or has reviewed (the author's own replies don't count) |
 | **Waiting on review** | everything else that's open |
 | **Drafts** | draft PRs |
 | **Merged today** | merged since midnight (up to 10 listed, count shows the real total) |

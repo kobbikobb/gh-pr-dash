@@ -69,6 +69,14 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should group PRs nobody was asked to review under Needs reviewer", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierNoReviewer, CI: "ok", Merge: "clean", URL: "https://x/1"}}, 100, false, 0)
+
+		if !strings.Contains(out, "Needs reviewer (1)") || !strings.Contains(out, "1 need reviewer") {
+			t.Errorf("missing needs-reviewer heading or count:\n%s", out)
+		}
+	})
+
 	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
 		out := renderTerminal(rows, 100, false, 0)
 

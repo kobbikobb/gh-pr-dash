@@ -167,10 +167,131 @@ func TestTierFor(t *testing.T) {
 	})
 
 	t.Run("should rank review-required as waiting", func(t *testing.T) {
-		pr := prWith(func(p *ghPR) { p.ReviewDecision = "REVIEW_REQUIRED"; setRollup(p, "SUCCESS") })
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "REVIEW_REQUIRED"
+			p.ReviewRequests.TotalCount = 1
+			setRollup(p, "SUCCESS")
+		})
 
 		if classify(pr, time.Now()).Tier != tierWaiting {
 			t.Error("want waiting")
+		}
+	})
+
+	t.Run("should rank a PR nobody was asked to review as needs-reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) { setRollup(p, "SUCCESS") })
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("want needs-reviewer")
+		}
+	})
+
+	t.Run("should not count the author's own review replies as a reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.Author.Login = "me"
+			p.LatestReviews.Nodes = []struct{ Author struct{ Login string } }{{Author: struct{ Login string }{"me"}}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("author's own review must not count as a reviewer")
+		}
+	})
+
+	t.Run("should not count a deleted reviewer as a reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.Author.Login = "me"
+			p.LatestReviews.Nodes = []struct{ Author struct{ Login string } }{{}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("a review with no author login must not count as a reviewer")
+		}
+	})
+
+	t.Run("should rank unresolved review threads as needs-action", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			setRollup(p, "SUCCESS")
+			p.ReviewThreads.Nodes = []struct{ IsResolved bool }{{IsResolved: true}, {IsResolved: false}}
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierNeedsAction || row.Unresolved != 1 {
+			t.Errorf("tier = %d, unresolved = %d; want needs-action, 1", row.Tier, row.Unresolved)
+		}
+	})
+
+	t.Run("should keep drafts in drafts despite unresolved threads", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.IsDraft = true
+			p.ReviewThreads.Nodes = []struct{ IsResolved bool }{{IsResolved: false}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierDrafts {
+			t.Error("want drafts")
+		}
+	})
+
+	t.Run("should not rank an approved PR as ready while a required review is outstanding", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "REVIEW_REQUIRED"
+			p.MergeStateStatus = "BLOCKED"
+			p.ReviewRequests.TotalCount = 1
+			p.LatestOpinionatedReviews.Nodes = []struct{ State string }{{State: "APPROVED"}}
+			setRollup(p, "SUCCESS")
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierWaiting || row.Review != "review" {
+			t.Errorf("tier = %d, review = %q; want waiting, review", row.Tier, row.Review)
+		}
+	})
+
+	t.Run("should not rank an approved green PR as ready when the merge is blocked", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			p.MergeStateStatus = "BLOCKED"
+			setRollup(p, "SUCCESS")
+		})
+
+		if classify(pr, time.Now()).Tier == tierReady {
+			t.Error("blocked PR must not be ready")
+		}
+	})
+
+	t.Run("should rank a queued PR as waiting, not ready, and record its position", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			setRollup(p, "SUCCESS")
+			p.MergeQueueEntry = &struct {
+				Position int
+				State    string
+			}{Position: 2, State: "QUEUED"}
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierBuilding || row.Status != "queued" || row.QueuePos != 2 {
+			t.Errorf("tier = %d, status = %q, pos = %d; want building, queued, 2", row.Tier, row.Status, row.QueuePos)
+		}
+	})
+
+	t.Run("should rank a PR the merge queue rejected as needs-action", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.ReviewDecision = "APPROVED"
+			setRollup(p, "SUCCESS")
+			p.MergeQueueEntry = &struct {
+				Position int
+				State    string
+			}{Position: 1, State: "UNMERGEABLE"}
+		})
+
+		row := classify(pr, time.Now())
+
+		if row.Tier != tierNeedsAction || row.Status != "queue_failed" {
+			t.Errorf("tier = %d, status = %q; want needs-action, queue_failed", row.Tier, row.Status)
 		}
 	})
 
@@ -347,4 +468,31 @@ func TestFilterRows(t *testing.T) {
 			t.Errorf("got %+v, want nil", got)
 		}
 	})
+}
+
+func TestStatusFor(t *testing.T) {
+	cases := []struct {
+		name             string
+		tier             int
+		ci, merge, queue string
+		want             string
+	}{
+		{"failed build beats conflict", tierNeedsAction, "fail", "conflict", "", "ci_failed"},
+		{"conflict beats comments", tierNeedsAction, "ok", "conflict", "", "conflict"},
+		{"comments when nothing else blocks", tierNeedsAction, "ok", "clean", "", "comments"},
+		{"ready", tierReady, "ok", "clean", "", "ready"},
+		{"building", tierBuilding, "pending", "clean", "", "building"},
+		{"no reviewer", tierNoReviewer, "ok", "clean", "", "no_reviewer"},
+		{"in review", tierWaiting, "ok", "clean", "", "in_review"},
+		{"draft", tierDrafts, "fail", "conflict", "", "draft"},
+		{"queued", tierBuilding, "ok", "clean", "QUEUED", "queued"},
+		{"queue rejection beats everything", tierNeedsAction, "fail", "conflict", "UNMERGEABLE", "queue_failed"},
+	}
+	for _, c := range cases {
+		t.Run("should pick "+c.name, func(t *testing.T) {
+			if got := statusFor(c.tier, c.ci, c.merge, c.queue); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
 }
