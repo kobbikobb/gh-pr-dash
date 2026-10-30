@@ -320,3 +320,20 @@ func TestPanelsWithView(t *testing.T) {
 		}
 	})
 }
+
+func TestHeaderInfoNeverOverflows(t *testing.T) {
+	info := headerInfo{left: "a-very-long-organisation/and-repo", right: "15:04:05 · next refresh in 30s"}
+
+	for _, tc := range []struct{ width, height int }{{40, 40}, {46, 40}, {60, 40}, {60, 10}, {30, 10}, {20, 10}} {
+		out := renderHeader(0, true, false, tc.width, tc.height, info)
+
+		for _, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+			if ln == "" {
+				continue
+			}
+			if got := runewidth.StringWidth(ln); got > tc.width {
+				t.Errorf("%dx%d: line is %d wide: %q", tc.width, tc.height, got, ln)
+			}
+		}
+	}
+}
