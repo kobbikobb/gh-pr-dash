@@ -43,6 +43,8 @@ func press(m watchModel, keys ...string) watchModel {
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		case "down":
 			msg = tea.KeyMsg{Type: tea.KeyDown}
+		case "backspace":
+			msg = tea.KeyMsg{Type: tea.KeyBackspace}
 		}
 		next, _ := m.Update(msg)
 		m = next.(watchModel)
@@ -327,4 +329,50 @@ func TestSidebarOnlyOnWideTerminals(t *testing.T) {
 	if strings.Contains(narrow, "Legend") {
 		t.Errorf("narrow terminal should hide the legend:\n%s", narrow)
 	}
+}
+
+func TestTitleFilter(t *testing.T) {
+	t.Run("should narrow rows as you type and keep the cursor on a visible PR", func(t *testing.T) {
+		m := press(testModel(), "/", "GOOD")
+
+		if got := len(m.visible()); got != 2 {
+			t.Fatalf("visible=%d, want 2 titles matching case-insensitively", got)
+		}
+		if m.cursor != "u2" {
+			t.Errorf("cursor=%q, want moved to the first match", m.cursor)
+		}
+	})
+
+	t.Run("should treat typed letters as text, not commands", func(t *testing.T) {
+		m := press(testModel(), "/", "q", "m", "o")
+
+		if m.search != "qmo" || m.confirm != nil {
+			t.Errorf("search=%q confirm=%v, want letters typed into the filter", m.search, m.confirm)
+		}
+	})
+
+	t.Run("should edit with backspace, keep with enter and clear with esc", func(t *testing.T) {
+		m := press(testModel(), "/", "goodx", "backspace")
+		if m.search != "goodx"[:4] {
+			t.Fatalf("search=%q", m.search)
+		}
+
+		m = press(m, "enter")
+		if m.searching || m.search != "good" {
+			t.Errorf("searching=%v search=%q, want filter kept", m.searching, m.search)
+		}
+
+		m = press(m, "esc")
+		if m.search != "" || len(m.visible()) != 4 {
+			t.Errorf("search=%q visible=%d, want filter cleared", m.search, len(m.visible()))
+		}
+	})
+
+	t.Run("should say so when nothing matches", func(t *testing.T) {
+		out := renderWatch(options{}, 0, testModel().rows, 0, "", "x", "F", terminal{width: 100, height: 30}, view{search: "zzz"})
+
+		if !strings.Contains(out, `no PR title matches "zzz"`) {
+			t.Errorf("missing empty message:\n%s", out)
+		}
+	})
 }

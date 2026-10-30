@@ -326,6 +326,21 @@ func filterRows(rows []Row, repo string) []Row {
 	return filtered
 }
 
+// filterTitle keeps rows whose title contains q, ignoring case.
+func filterTitle(rows []Row, q string) []Row {
+	if q == "" {
+		return rows
+	}
+	q = strings.ToLower(q)
+	var out []Row
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.Title), q) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // classifyMerged builds a row for an already-merged PR; CI/review status is
 // no longer actionable, so only the merge marker and merge time are shown.
 func classifyMerged(pr ghPR, now time.Time) Row {
