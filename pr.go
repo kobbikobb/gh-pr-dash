@@ -148,7 +148,8 @@ func rollupState(pr ghPR) string {
 	return ""
 }
 
-// unresolvedThreads counts review threads nobody has resolved yet.
+// unresolvedThreads counts review threads nobody has resolved yet. The query
+// fetches at most 100 threads (the GraphQL maximum), so more are not counted.
 func unresolvedThreads(pr ghPR) int {
 	n := 0
 	for _, t := range pr.ReviewThreads.Nodes {
@@ -167,7 +168,8 @@ func hasReviewer(pr ghPR) bool {
 		return true
 	}
 	for _, r := range pr.LatestReviews.Nodes {
-		if r.Author.Login != pr.Author.Login {
+		// A deleted reviewer has no login; they are not someone to chase.
+		if r.Author.Login != "" && r.Author.Login != pr.Author.Login {
 			return true
 		}
 	}

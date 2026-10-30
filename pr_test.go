@@ -197,6 +197,17 @@ func TestTierFor(t *testing.T) {
 		}
 	})
 
+	t.Run("should not count a deleted reviewer as a reviewer", func(t *testing.T) {
+		pr := prWith(func(p *ghPR) {
+			p.Author.Login = "me"
+			p.LatestReviews.Nodes = []struct{ Author struct{ Login string } }{{}}
+		})
+
+		if classify(pr, time.Now()).Tier != tierNoReviewer {
+			t.Error("a review with no author login must not count as a reviewer")
+		}
+	})
+
 	t.Run("should rank unresolved review threads as needs-action", func(t *testing.T) {
 		pr := prWith(func(p *ghPR) {
 			p.ReviewDecision = "APPROVED"

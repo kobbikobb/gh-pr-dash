@@ -22,7 +22,7 @@ const searchQuery = `query($q:String!,$n:Int!){
         comments{ totalCount }
         reviewRequests{ totalCount }
         mergeQueueEntry{ position state }
-        reviewThreads(first:50){ nodes{ isResolved } }
+        reviewThreads(first:100){ nodes{ isResolved } }
         latestReviews(first:20){ nodes{ author{ login } } }
         latestOpinionatedReviews(first:20){ nodes{ state } }
         commits(last:1){ nodes{ commit{ statusCheckRollup{ state } } } }
