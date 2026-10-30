@@ -287,3 +287,31 @@ func TestPanels(t *testing.T) {
 		}
 	})
 }
+
+func TestPanelsWithView(t *testing.T) {
+	rows := []Row{
+		{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "Broken", URL: "https://x/1"},
+		{Tier: tierReady, Status: "ready", Repository: "api", Title: "Fine", URL: "https://x/2"},
+	}
+
+	t.Run("should mark only the cursor row", func(t *testing.T) {
+		out := renderPanels(rows, 100, false, 0, view{cursor: "https://x/2", interactive: true})
+
+		if strings.Count(out, "❯") != 1 || !strings.Contains(out, "❯ ✅ Ready") {
+			t.Errorf("cursor marker wrong:\n%s", out)
+		}
+	})
+
+	t.Run("should fold a category to its border and keep the box aligned", func(t *testing.T) {
+		out := renderPanels(rows, 100, false, 0, view{collapsed: map[int]bool{tierNeedsAction: true}, interactive: true})
+
+		if strings.Contains(out, "Broken") || !strings.Contains(out, "Needs action (1) 🚨 ▸") {
+			t.Errorf("folded panel should show a ▸ heading and no rows:\n%s", out)
+		}
+		for _, ln := range strings.Split(out, "\n") {
+			if (strings.HasPrefix(ln, "╭") || strings.HasPrefix(ln, "╰")) && runewidth.StringWidth(ln) != 100 {
+				t.Errorf("border is %d wide: %q", runewidth.StringWidth(ln), ln)
+			}
+		}
+	})
+}

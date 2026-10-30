@@ -112,6 +112,19 @@ func headTitle(tier int, counts []int, mergedShown int) string {
 // Padding is applied to the plain text before color so ANSI escapes never
 // throw off column widths.
 func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
+	return renderPanels(rows, width, color, mergedTotal, view{})
+}
+
+// view is the interactive state a render needs: which row the cursor is on
+// (by URL, so it survives refreshes) and which categories are folded away.
+// The zero value renders the plain one-shot table.
+type view struct {
+	cursor      string
+	collapsed   map[int]bool
+	interactive bool
+}
+
+func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"
 	}
@@ -134,10 +147,10 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	// left once the fixed columns and the URL are accounted for — so the URL sits
 	// right after the titles rather than flush against a (possibly mis-detected)
 	// right edge. Avoids both a huge gap on wide terminals and overflow on narrow.
-	numW := len(strconv.Itoa(len(rows))) + 1 // digits + dot
+	const markW = 2 // cursor marker and its space
 	statusW := statusWidth(rows)
 	contentW := width - panelOverhead
-	prefixW := numW + 2 + statusW + 2 + idleW + 2
+	prefixW := markW + statusW + 2 + idleW + 2
 	longest, urlW, longestRepo := 0, 0, 0
 	titles := make([]string, len(rows))
 	for i, r := range rows {
@@ -184,17 +197,27 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 				desc = categories[tier].desc
 				border = categories[tier].color(p)
 			}
-			b.WriteString(panelTop(headTitle(tier, counts, mergedShown), desc, width, border, p) + "\n")
+			title := headTitle(tier, counts, mergedShown)
+			if v.interactive {
+				title += " " + chevron(v.collapsed[tier])
+			}
+			b.WriteString(panelTop(title, desc, width, border, p) + "\n")
 		}
 
-		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
+		mark := "  "
+		if v.cursor != "" && r.URL == v.cursor {
+			mark = p.b + p.c + "❯" + p.z + " "
+		}
+		if v.collapsed[tier] {
+			continue
+		}
 		title := padRight(truncate(titles[i], titleW), titleW)
 		status := statusField(r, statusW, p)
 		idle := idleField(r, p)
 		repo := p.d + padRight(truncate(r.Repository, repoW), repoW) + p.z
 		url := p.d + r.URL + p.z
 
-		line := fmt.Sprintf("%s  %s  %s  %s  %s   %s", num, status, idle, repo, title, url)
+		line := fmt.Sprintf("%s%s  %s  %s  %s   %s", mark, status, idle, repo, title, url)
 		plainW := prefixW + repoW + 2 + titleW + 3 + len([]rune(r.URL))
 		b.WriteString(panelLine(line, plainW, width, border, p) + "\n")
 	}
@@ -202,4 +225,11 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	fmt.Fprintf(&b, "\n%s%d open · %d need action · %d ready · %d need reviewer · %d merged%s\n",
 		p.d, len(rows)-counts[tierMerged], counts[tierNeedsAction], counts[tierReady], counts[tierNoReviewer], mergedShown, p.z)
 	return b.String()
+}
+
+func chevron(collapsed bool) string {
+	if collapsed {
+		return "▸"
+	}
+	return "▾"
 }

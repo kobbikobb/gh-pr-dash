@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,16 +31,6 @@ func TestRefreshStatus(t *testing.T) {
 	})
 }
 
-func TestParseTargets(t *testing.T) {
-	rows := []Row{{Ref: "a#1"}, {Ref: "a#2"}, {Ref: "a#3"}}
-
-	got := parseTargets("3, 1 3 9 x", rows)
-
-	if len(got) != 2 || got[0].Ref != "a#3" || got[1].Ref != "a#1" {
-		t.Errorf("got %v, want a#3 then a#1 (deduped, out-of-range ignored)", got)
-	}
-}
-
 func press(m watchModel, keys ...string) watchModel {
 	for _, k := range keys {
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
@@ -48,8 +39,10 @@ func press(m watchModel, keys ...string) watchModel {
 			msg = tea.KeyMsg{Type: tea.KeyEnter}
 		case "esc":
 			msg = tea.KeyMsg{Type: tea.KeyEsc}
-		case "backspace":
-			msg = tea.KeyMsg{Type: tea.KeyBackspace}
+		case "up":
+			msg = tea.KeyMsg{Type: tea.KeyUp}
+		case "down":
+			msg = tea.KeyMsg{Type: tea.KeyDown}
 		}
 		next, _ := m.Update(msg)
 		m = next.(watchModel)
@@ -60,89 +53,12 @@ func press(m watchModel, keys ...string) watchModel {
 func testModel() watchModel {
 	m := newWatchModel(options{})
 	m.rows = []Row{
-		{Ref: "a#1", Title: "broken", Tier: tierNeedsAction},
-		{Ref: "a#2", Title: "good", Tier: tierReady},
-		{Ref: "a#3", Title: "also good", Tier: tierReady},
-		{Ref: "a#4", Title: "waiting", Tier: tierWaiting},
+		{Ref: "a#1", Title: "broken", Tier: tierNeedsAction, URL: "u1"},
+		{Ref: "a#2", Title: "good", Tier: tierReady, URL: "u2"},
+		{Ref: "a#3", Title: "also good", Tier: tierReady, URL: "u3"},
+		{Ref: "a#4", Title: "waiting", Tier: tierWaiting, URL: "u4"},
 	}
-	return m
-}
-
-func TestBareDigitsDoNothing(t *testing.T) {
-	m := press(testModel(), "1", "2")
-
-	if m.action != 0 || m.input != "" || m.status != "" {
-		t.Errorf("bare digits changed state: %+v", m)
-	}
-}
-
-func TestMergeOnlyTargetsReadyPRs(t *testing.T) {
-	m := press(testModel(), "m", "1", ",", "2", "enter")
-
-	if len(m.confirm) != 1 || m.confirm[0].Ref != "a#2" || m.skipped != 1 {
-		t.Errorf("confirm=%v skipped=%d, want only a#2 with 1 skipped", m.confirm, m.skipped)
-	}
-}
-
-func TestMergeByGroupAndCancel(t *testing.T) {
-	m := press(testModel(), "m", "r")
-	if len(m.confirm) != 2 {
-		t.Fatalf("confirm=%v, want both ready PRs", m.confirm)
-	}
-
-	m = press(m, "x") // stray key must not cancel or confirm
-	if m.confirm == nil {
-		t.Fatal("stray key dismissed the confirmation")
-	}
-
-	m = press(m, "n")
-	if m.confirm != nil || m.merging {
-		t.Errorf("cancel left confirm=%v merging=%v", m.confirm, m.merging)
-	}
-}
-
-func TestMergeNothingReady(t *testing.T) {
-	m := press(testModel(), "m", "n")
-
-	if m.confirm != nil || !strings.Contains(m.status, "nothing to merge") {
-		t.Errorf("confirm=%v status=%q", m.confirm, m.status)
-	}
-}
-
-func TestEscAndBackspaceEditTarget(t *testing.T) {
-	m := press(testModel(), "o", "1", "2", "backspace")
-	if m.input != "1" {
-		t.Errorf("input=%q, want 1", m.input)
-	}
-
-	m = press(m, "esc")
-	if m.action != 0 || m.input != "" {
-		t.Errorf("esc left action=%q input=%q", m.action, m.input)
-	}
-}
-
-func TestSlackIsNotImplemented(t *testing.T) {
-	m := press(testModel(), "s")
-
-	if m.action != 0 || m.status != "slack: not implemented" {
-		t.Errorf("action=%q status=%q", m.action, m.status)
-	}
-}
-
-func TestFetchResultHeldWhileActionPending(t *testing.T) {
-	m := press(testModel(), "o", "1")
-	fresh := []Row{{Ref: "z#9", Tier: tierReady}}
-
-	next, _ := m.Update(fetchMsg{rows: fresh})
-	m = next.(watchModel)
-	if m.rows[0].Ref != "a#1" {
-		t.Fatalf("rows changed mid-action: %v", m.rows)
-	}
-
-	m = press(m, "esc")
-	if m.rows[0].Ref != "z#9" {
-		t.Errorf("deferred fetch not applied after action ended: %v", m.rows)
-	}
+	return m.fixCursor()
 }
 
 func TestStaleFetchIsIgnored(t *testing.T) {
@@ -161,25 +77,6 @@ func TestMergeStatusReportsFailures(t *testing.T) {
 
 	if !strings.Contains(got, "merged 1, 1 failed") || !strings.Contains(got, "a#2: not mergeable") {
 		t.Errorf("got %q", got)
-	}
-}
-
-func TestAgentMessageListsTargets(t *testing.T) {
-	g, _ := findGroup("r")
-	got := agentMessage(g.header, []Row{{Ref: "a#2", Title: "good", URL: "u"}})
-
-	if !strings.Contains(got, "merge ready PRs") || !strings.Contains(got, "- [a#2] good - u") {
-		t.Errorf("got %q", got)
-	}
-}
-
-func TestPastedTargetsAreAccepted(t *testing.T) {
-	m := testModel()
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
-	next, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1,2 3"), Paste: true})
-
-	if got := next.(watchModel).input; got != "1,2 3" {
-		t.Errorf("input=%q, want pasted text", got)
 	}
 }
 
@@ -206,7 +103,7 @@ func TestFooterSurvivesShortTerminal(t *testing.T) {
 		rows[i] = Row{Ref: "a#1", Title: "t", Tier: tierWaiting, URL: "u"}
 	}
 
-	out := renderWatch(options{}, 0, rows, 0, "", "x", "FOOTER-LINE", terminal{width: 100, height: 12})
+	out := renderWatch(options{}, 0, rows, 0, "", "x", "FOOTER-LINE", terminal{width: 100, height: 12}, view{})
 
 	if !strings.Contains(out, "FOOTER-LINE") || strings.Count(out, "\n")+1 > 12 {
 		t.Errorf("footer missing or frame taller than terminal:\n%s", out)
@@ -256,13 +153,140 @@ func TestPasteNeverTriggersActions(t *testing.T) {
 	}
 }
 
-func TestPastedGroupLetterDoesNotRunAction(t *testing.T) {
-	m := press(testModel(), "o")
+func TestCursorMovesAndStaysInBounds(t *testing.T) {
+	m := testModel()
+	if m.cursor != "u1" {
+		t.Fatalf("cursor=%q, want first row", m.cursor)
+	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Paste: true})
+	m = press(m, "down", "j", "down", "down", "down")
+	if m.cursor != "u4" {
+		t.Errorf("cursor=%q, want clamped to last row u4", m.cursor)
+	}
 
-	got := next.(watchModel)
-	if got.action != 'o' || got.input != "" || got.status != "" {
-		t.Errorf("pasted 'a' ran an action: %+v", got)
+	m = press(m, "up", "k", "k", "k", "k")
+	if m.cursor != "u1" {
+		t.Errorf("cursor=%q, want clamped to first row u1", m.cursor)
+	}
+}
+
+func TestCursorFollowsPRAcrossRefresh(t *testing.T) {
+	m := press(testModel(), "down", "down") // u3
+
+	next, _ := m.Update(fetchMsg{rows: []Row{
+		{Ref: "n#0", Tier: tierNeedsAction, URL: "u0"},
+		{Ref: "a#3", Tier: tierReady, URL: "u3"},
+	}})
+
+	if got := next.(watchModel).cursor; got != "u3" {
+		t.Errorf("cursor=%q, want to stay on u3 after rows shifted", got)
+	}
+}
+
+func TestCursorReseatsWhenPRDisappears(t *testing.T) {
+	m := press(testModel(), "down", "down", "down") // u4, last
+
+	next, _ := m.Update(fetchMsg{rows: []Row{{Ref: "z#1", Tier: tierReady, URL: "z1"}}})
+
+	if got := next.(watchModel).cursor; got != "z1" {
+		t.Errorf("cursor=%q, want clamped onto the remaining row", got)
+	}
+}
+
+func TestMergeSelectedOnlyWhenReady(t *testing.T) {
+	m := press(testModel(), "m") // cursor on needs-action PR
+	if m.confirm != nil || !strings.Contains(m.status, "can't merge") {
+		t.Errorf("confirm=%v status=%q, want refusal", m.confirm, m.status)
+	}
+
+	m = press(m, "down", "m")
+	if len(m.confirm) != 1 || m.confirm[0].Ref != "a#2" {
+		t.Errorf("confirm=%v, want only a#2", m.confirm)
+	}
+}
+
+func TestMergeCategoryTakesEveryReadyPR(t *testing.T) {
+	m := press(testModel(), "down", "M")
+	if len(m.confirm) != 2 {
+		t.Fatalf("confirm=%v, want both ready PRs", m.confirm)
+	}
+
+	m = press(m, "x") // stray key must not cancel or confirm
+	if m.confirm == nil || m.merging {
+		t.Fatal("stray key changed the confirmation")
+	}
+
+	m = press(m, "n")
+	if m.confirm != nil || m.merging {
+		t.Errorf("cancel left confirm=%v merging=%v", m.confirm, m.merging)
+	}
+}
+
+func TestAgentCategoryUsesItsHeader(t *testing.T) {
+	t.Setenv("GH_PR_DASH_AGENT_CMD", "true")
+
+	m := press(testModel(), "down", "A")
+
+	if !strings.Contains(m.status, "(2 PR(s))") {
+		t.Errorf("status=%q, want both ready PRs sent", m.status)
+	}
+	got := agentMessage(categories[tierReady].agent, []Row{{Ref: "a#2", Title: "good", URL: "u"}})
+	if !strings.Contains(got, "merge ready PRs") || !strings.Contains(got, "- [a#2] good - u") {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestNumberKeyJumpsAndUnfolds(t *testing.T) {
+	m := testModel()
+
+	m = press(m, "enter") // fold Needs action; cursor must leave it
+	if m.cursor != "u2" || !m.collapsed[tierNeedsAction] {
+		t.Fatalf("cursor=%q collapsed=%v, want u2 and Needs action folded", m.cursor, m.collapsed)
+	}
+
+	m = press(m, "1")
+	if m.cursor != "u1" || m.collapsed[tierNeedsAction] {
+		t.Errorf("cursor=%q collapsed=%v, want jumped to u1 and unfolded", m.cursor, m.collapsed)
+	}
+
+	m = press(m, "4") // Needs reviewer is empty
+	if m.cursor != "u1" || !strings.Contains(m.status, "no PRs") {
+		t.Errorf("cursor=%q status=%q, want unchanged with a message", m.cursor, m.status)
+	}
+}
+
+func TestFoldingNeverStrandsTheCursor(t *testing.T) {
+	m := testModel()
+	m.rows = m.rows[:1] // only one category
+
+	m = press(m, "enter")
+
+	if m.collapsed[tierNeedsAction] || m.cursor != "u1" {
+		t.Errorf("folded the only category: collapsed=%v cursor=%q", m.collapsed, m.cursor)
+	}
+}
+
+func TestHelpTogglesAndEscClears(t *testing.T) {
+	m := press(testModel(), "?")
+	if !m.help || !strings.Contains(m.footer(), "fold / unfold") {
+		t.Fatalf("help=%v footer=%q", m.help, m.footer())
+	}
+
+	m = press(m, "esc")
+	if m.help {
+		t.Error("esc left help open")
+	}
+}
+
+func TestCursorRowIsMarkedAndStaysVisible(t *testing.T) {
+	rows := make([]Row, 30)
+	for i := range rows {
+		rows[i] = Row{Ref: "a#1", Title: "t", Tier: tierWaiting, URL: "u" + strconv.Itoa(i)}
+	}
+
+	out := renderWatch(options{}, 0, rows, 0, "", "x", "FOOT", terminal{width: 100, height: 12}, view{cursor: "u25", interactive: true})
+
+	if !strings.Contains(out, "❯") {
+		t.Errorf("cursor row scrolled off a short terminal:\n%s", out)
 	}
 }
