@@ -18,8 +18,21 @@ type ghPR struct {
 	MergedAt         time.Time
 	Mergeable        string
 	MergeStateStatus string
+	Author           struct{ Login string }
 	Repository       struct{ NameWithOwner string }
 	Comments         struct{ TotalCount int }
+	ReviewRequests   struct{ TotalCount int }
+	MergeQueueEntry  *struct {
+		Position int
+		State    string
+	}
+
+	ReviewThreads struct {
+		Nodes []struct{ IsResolved bool }
+	}
+	LatestReviews struct {
+		Nodes []struct{ Author struct{ Login string } }
+	}
 
 	LatestOpinionatedReviews struct {
 		Nodes []struct{ State string }
@@ -39,16 +52,23 @@ type ghPR struct {
 //	ci:     ok | fail | pending | none
 //	merge:  clean | conflict | unknown | merged
 //	review: approved | changes | review | none
+//	status: ci_failed | conflict | comments | ready | building |
+//	        queued | queue_failed | no_reviewer | in_review | draft | merged
+//
+// Status is the single most important reason for the row's tier.
 type Row struct {
 	Tier       int        `json:"tier"`
 	IdleDays   int        `json:"idle_days"`
 	CI         string     `json:"ci"`
 	Merge      string     `json:"merge"`
 	Review     string     `json:"review"`
+	Status     string     `json:"status"`
 	Ref        string     `json:"pr"`
 	Repository string     `json:"repo"`
 	URL        string     `json:"url"`
 	Comments   int        `json:"comments"`
+	Unresolved int        `json:"unresolved_threads"`
+	QueuePos   int        `json:"queue_position,omitempty"`
 	Title      string     `json:"title"`
 	MergedAt   *time.Time `json:"merged_at,omitempty"`
 }
@@ -58,6 +78,7 @@ const (
 	tierNeedsAction = iota
 	tierReady
 	tierBuilding
+	tierNoReviewer
 	tierWaiting
 	tierDrafts
 	tierMerged
@@ -106,10 +127,12 @@ func reviewCode(pr ghPR) string {
 	switch {
 	case changes:
 		return "changes"
-	case approved:
-		return "approved"
+	// Some approval exists but GitHub still wants more (e.g. a required team),
+	// so the PR is not approved yet.
 	case pr.ReviewDecision == "REVIEW_REQUIRED":
 		return "review"
+	case approved:
+		return "approved"
 	default:
 		return "none"
 	}
@@ -125,17 +148,61 @@ func rollupState(pr ghPR) string {
 	return ""
 }
 
-func tierFor(pr ghPR, ci, merge, review string) int {
+// unresolvedThreads counts review threads nobody has resolved yet.
+func unresolvedThreads(pr ghPR) int {
+	n := 0
+	for _, t := range pr.ReviewThreads.Nodes {
+		if !t.IsResolved {
+			n++
+		}
+	}
+	return n
+}
+
+// hasReviewer reports whether anyone other than the author was asked to
+// review or has reviewed. The author's own replies create COMMENTED reviews,
+// so they must not count.
+func hasReviewer(pr ghPR) bool {
+	if pr.ReviewRequests.TotalCount > 0 {
+		return true
+	}
+	for _, r := range pr.LatestReviews.Nodes {
+		if r.Author.Login != pr.Author.Login {
+			return true
+		}
+	}
+	return false
+}
+
+// queueState is the merge-queue entry state, or "" when the PR isn't queued.
+func queueState(pr ghPR) string {
+	if pr.MergeQueueEntry == nil {
+		return ""
+	}
+	return pr.MergeQueueEntry.State
+}
+
+func tierFor(pr ghPR, ci, merge, review string, unresolved int) int {
 	switch {
 	case pr.IsDraft:
 		return tierDrafts
-	case ci == "fail" || merge == "conflict":
+	// A queued PR is out of the user's hands unless the queue rejected it.
+	case queueState(pr) == "UNMERGEABLE":
+		return tierNeedsAction
+	case pr.MergeQueueEntry != nil:
+		return tierBuilding
+	case ci == "fail" || merge == "conflict" || unresolved > 0:
 		return tierNeedsAction
 	case review == "approved" && merge == "clean":
 		switch ci {
 		case "pending":
 			return tierBuilding
 		case "ok":
+			// Green and approved but GitHub still blocks the merge (e.g. a
+			// required check or branch rule), so it is not ready for the user.
+			if pr.MergeStateStatus == "BLOCKED" {
+				return tierWaiting
+			}
 			return tierReady
 		default:
 			// No rollup: ready only when GitHub says nothing blocks the merge;
@@ -145,8 +212,44 @@ func tierFor(pr ghPR, ci, merge, review string) int {
 			}
 			return tierBuilding
 		}
+	case !hasReviewer(pr):
+		return tierNoReviewer
 	default:
 		return tierWaiting
+	}
+}
+
+// statusFor picks the one status a row shows. Within needs-action the order
+// is: rejected by the merge queue, failed build, conflict, then unresolved
+// comments.
+func statusFor(tier int, ci, merge, queue string) string {
+	switch tier {
+	case tierNeedsAction:
+		switch {
+		case queue == "UNMERGEABLE":
+			return "queue_failed"
+		case ci == "fail":
+			return "ci_failed"
+		case merge == "conflict":
+			return "conflict"
+		default:
+			return "comments"
+		}
+	case tierReady:
+		return "ready"
+	case tierBuilding:
+		if queue != "" {
+			return "queued"
+		}
+		return "building"
+	case tierNoReviewer:
+		return "no_reviewer"
+	case tierWaiting:
+		return "in_review"
+	case tierDrafts:
+		return "draft"
+	default:
+		return "merged"
 	}
 }
 
@@ -154,9 +257,18 @@ func classify(pr ghPR, now time.Time) Row {
 	ci := ciCode(rollupState(pr))
 	merge := mergeCode(pr.Mergeable)
 	review := reviewCode(pr)
+	unresolved := unresolvedThreads(pr)
+	tier := tierFor(pr, ci, merge, review, unresolved)
+	queuePos := 0
+	if pr.MergeQueueEntry != nil {
+		queuePos = pr.MergeQueueEntry.Position
+	}
 
 	return Row{
-		Tier:       tierFor(pr, ci, merge, review),
+		Tier:       tier,
+		Status:     statusFor(tier, ci, merge, queueState(pr)),
+		QueuePos:   queuePos,
+		Unresolved: unresolved,
 		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:         ci,
 		Merge:      merge,
@@ -208,6 +320,7 @@ func classifyMerged(pr ghPR, now time.Time) Row {
 		CI:         "none",
 		Merge:      "merged",
 		Review:     "none",
+		Status:     "merged",
 		Ref:        shortRef(pr),
 		Repository: repoFromRef(shortRef(pr)),
 		URL:        pr.URL,

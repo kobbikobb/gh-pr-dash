@@ -17,8 +17,13 @@ const searchQuery = `query($q:String!,$n:Int!){
     nodes{
       ... on PullRequest{
         number title url isDraft reviewDecision updatedAt mergedAt mergeable mergeStateStatus
+        author{ login }
         repository{ nameWithOwner }
         comments{ totalCount }
+        reviewRequests{ totalCount }
+        mergeQueueEntry{ position state }
+        reviewThreads(first:50){ nodes{ isResolved } }
+        latestReviews(first:20){ nodes{ author{ login } } }
         latestOpinionatedReviews(first:20){ nodes{ state } }
         commits(last:1){ nodes{ commit{ statusCheckRollup{ state } } } }
       }
