@@ -504,7 +504,12 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 		if opts.repo != "" {
 			total = 0
 		}
-		out += renderPanels(filtered, inner, t.useColor, total, v)
+		if inner >= sidebarMinTotal {
+			bodyW := inner - sidebarWidth - sidebarGap
+			out += withSidebar(renderPanels(filtered, bodyW, t.useColor, total, v), renderSidebar(filtered, p), bodyW)
+		} else {
+			out += renderPanels(filtered, inner, t.useColor, total, v)
+		}
 	}
 
 	footLines := strings.Split(footer, "\n")
