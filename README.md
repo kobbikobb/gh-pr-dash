@@ -18,11 +18,11 @@
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
 ```
-Needs action — CI fail / conflict (2)
+Needs action (2) 🚨  PRs with failing checks, conflicts, comments or a rejected queue entry
   ✗ clean    conflict     1d api   extract idle watchdog into run-watchdog    https://github.com/me/api/pull/1008
   ✗ clean    clean        2d api   map user_id from transactions to goaml (1) https://github.com/me/api/pull/12442
 
-Ready to merge (1)
+Ready to merge (1) ✅  Approved, passing checks, clean, not blocked
   ✓ clean    clean        2d api   Validate regulator config on save (1)       https://github.com/me/api/pull/12385
 ```
 
@@ -73,9 +73,9 @@ Seven tiers, most-stale-first within each:
 |---|---|
 | **Needs action** | merge queue rejected it, CI failing, merge conflict, or unresolved review threads |
 | **Ready to merge** | approved (no review still required), CI green, no conflicts, not blocked by GitHub |
-| **Waiting on CI / queue** | approved but CI still running, or in the merge queue |
+| **In progress** | approved but CI still running, or in the merge queue |
 | **Needs reviewer** | nobody asked to review or has reviewed (the author's own replies don't count) |
-| **Waiting on review** | everything else that's open |
+| **In review** | everything else that's open |
 | **Drafts** | draft PRs |
 | **Merged today** | merged since midnight (up to 10 listed, count shows the real total) |
 

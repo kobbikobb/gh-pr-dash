@@ -77,6 +77,28 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("should end each heading with its icon and describe the category when wide", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 160, false, 12)
+
+		if !strings.Contains(out, "Merged today (12) 🎉  Merged since midnight\n") {
+			t.Errorf("heading should read name, count, icon, description:\n%s", out)
+		}
+	})
+
+	t.Run("should drop the description when the terminal is too narrow for it", func(t *testing.T) {
+		out := renderTerminal([]Row{{Tier: tierMerged, URL: "https://x/1"}}, 30, false, 0)
+
+		if strings.Contains(out, "Merged since midnight") {
+			t.Errorf("description should be dropped on narrow width:\n%s", out)
+		}
+	})
+
+	t.Run("should have one category per tier", func(t *testing.T) {
+		if len(categories) != tierMerged+1 {
+			t.Errorf("categories = %d, want %d", len(categories), tierMerged+1)
+		}
+	})
+
 	t.Run("should emit no ANSI escapes when color is off", func(t *testing.T) {
 		out := renderTerminal(rows, 100, false, 0)
 

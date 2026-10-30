@@ -4,17 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-)
 
-var tierNames = []string{
-	"Needs action — CI fail / conflict / comments",
-	"Ready to merge",
-	"Waiting on CI / queue",
-	"Needs reviewer",
-	"Waiting on review",
-	"Drafts",
-	"Merged today",
-}
+	"github.com/mattn/go-runewidth"
+)
 
 // idleW fits "14:32" for merged rows and "14d" for open rows.
 const idleW = 5
@@ -127,6 +119,25 @@ func idleField(r Row, p palette) string {
 	return idleColor(r.IdleDays, p) + padLeft(strconv.Itoa(r.IdleDays)+"d", idleW) + p.z
 }
 
+// heading renders "Name (N) icon" in the category color, followed by a dim
+// description when the terminal is wide enough to show it without wrapping.
+func heading(tier int, counts []int, mergedShown, width int, p palette) string {
+	if tier < 0 || tier >= len(categories) {
+		return p.b + p.d + "?" + p.z
+	}
+	c := categories[tier]
+	count := counts[tier]
+	if tier == tierMerged {
+		count = mergedShown
+	}
+	title := fmt.Sprintf("%s (%d) %s", c.name, count, c.icon)
+	out := p.b + c.color(p) + title + p.z
+	if runewidth.StringWidth(title)+2+runewidth.StringWidth(c.desc) <= width {
+		out += "  " + p.d + c.desc + p.z
+	}
+	return out
+}
+
 // renderTerminal produces the aligned, grouped table. mergedTotal is the real
 // count of PRs merged today (from the search issueCount), so the merged
 // heading can state the total even when only mergedLimit rows are listed.
@@ -138,7 +149,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 	}
 	p := colors(color)
 
-	counts := make([]int, len(tierNames))
+	counts := make([]int, len(categories))
 	for _, r := range rows {
 		if r.Tier >= 0 && r.Tier < len(counts) {
 			counts[r.Tier]++
@@ -184,7 +195,6 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 		titleW = 12
 	}
 
-	headColor := []string{p.r, p.g, p.y, p.y, p.c, p.d, p.d}
 	var b strings.Builder
 	tier := -1
 	for i, r := range rows {
@@ -193,19 +203,7 @@ func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
 				b.WriteString("\n")
 			}
 			tier = r.Tier
-			name := "?"
-			if tier >= 0 && tier < len(tierNames) {
-				count := counts[tier]
-				if tier == tierMerged {
-					count = mergedShown
-				}
-				name = fmt.Sprintf("%s (%d)", tierNames[tier], count)
-			}
-			color := p.d
-			if tier >= 0 && tier < len(headColor) {
-				color = headColor[tier]
-			}
-			b.WriteString(p.b + color + name + p.z + "\n")
+			b.WriteString(heading(tier, counts, mergedShown, width, p) + "\n")
 		}
 
 		num := p.d + padRight(strconv.Itoa(i+1)+".", numW) + p.z
