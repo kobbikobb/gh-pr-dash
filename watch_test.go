@@ -236,15 +236,32 @@ func TestAgentCategoryUsesItsHeader(t *testing.T) {
 	}
 }
 
-func TestNumberKeyJumpsAndUnfolds(t *testing.T) {
+func TestEnterFoldsAndUnfoldsTheCategory(t *testing.T) {
 	m := testModel()
 
-	m = press(m, "enter") // fold Needs action; cursor must leave it
-	if m.cursor != "u2" || !m.collapsed[tierNeedsAction] {
-		t.Fatalf("cursor=%q collapsed=%v, want u2 and Needs action folded", m.cursor, m.collapsed)
+	m = press(m, "enter")
+	if m.cursor != "u1" || !m.collapsed[tierNeedsAction] {
+		t.Fatalf("cursor=%q collapsed=%v, want folded with cursor kept on the category", m.cursor, m.collapsed)
 	}
 
-	m = press(m, "1")
+	m = press(m, "m")
+	if !strings.Contains(m.status, "folded") {
+		t.Errorf("status=%q, want a hint to unfold", m.status)
+	}
+
+	m = press(m, "down")
+	if m.cursor != "u2" {
+		t.Errorf("cursor=%q, want to move past the folded category", m.cursor)
+	}
+
+	m = press(m, "up", "enter")
+	if m.collapsed[tierNeedsAction] {
+		t.Errorf("enter on a folded category should unfold it")
+	}
+}
+
+func TestNumberKeyJumpsAndUnfolds(t *testing.T) {
+	m := press(testModel(), "enter", "1")
 	if m.cursor != "u1" || m.collapsed[tierNeedsAction] {
 		t.Errorf("cursor=%q collapsed=%v, want jumped to u1 and unfolded", m.cursor, m.collapsed)
 	}
@@ -252,17 +269,6 @@ func TestNumberKeyJumpsAndUnfolds(t *testing.T) {
 	m = press(m, "4") // Needs reviewer is empty
 	if m.cursor != "u1" || !strings.Contains(m.status, "no PRs") {
 		t.Errorf("cursor=%q status=%q, want unchanged with a message", m.cursor, m.status)
-	}
-}
-
-func TestFoldingNeverStrandsTheCursor(t *testing.T) {
-	m := testModel()
-	m.rows = m.rows[:1] // only one category
-
-	m = press(m, "enter")
-
-	if m.collapsed[tierNeedsAction] || m.cursor != "u1" {
-		t.Errorf("folded the only category: collapsed=%v cursor=%q", m.collapsed, m.cursor)
 	}
 }
 

@@ -192,6 +192,9 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 			if v.interactive {
 				title += " " + chevron(v.collapsed[tier])
 			}
+			if v.collapsed[tier] && v.cursor == r.URL {
+				title = "❯ " + title
+			}
 			b.WriteString(panelTop(title, desc, width, border, p) + "\n")
 		}
 

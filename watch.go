@@ -218,13 +218,17 @@ func (m watchModel) keyConfirm(k string) (watchModel, tea.Cmd) {
 	return m, nil
 }
 
-// shown is the rows in display order, minus the ones in folded categories.
+// shown is the selectable rows in display order: every PR, except that a folded
+// category is reduced to a single stop.
 func (m watchModel) shown() []Row {
 	var out []Row
+	last := -1
 	for _, r := range filterRows(m.rows, m.opts.repo) {
-		if !m.collapsed[r.Tier] {
+		// A folded category keeps one stop (its first PR) so enter can unfold it.
+		if !m.collapsed[r.Tier] || r.Tier != last {
 			out = append(out, r)
 		}
+		last = r.Tier
 	}
 	return out
 }
@@ -291,31 +295,15 @@ func (m watchModel) jump(tier int) watchModel {
 	return m.fixCursor()
 }
 
-// toggleCollapse folds or unfolds the cursor's category. A folded category has
-// no selectable rows, so the cursor moves to the nearest visible one; unfold it
-// again with its number key.
+// toggleCollapse folds or unfolds the cursor's category. A folded category is
+// a single stop, so enter on it unfolds it again.
 func (m watchModel) toggleCollapse() watchModel {
 	sel, ok := m.selected()
 	if !ok {
 		return m
 	}
-	m.collapsed[sel.Tier] = true
-	rows := filterRows(m.rows, m.opts.repo)
-	target := ""
-	for _, r := range rows {
-		if m.collapsed[r.Tier] {
-			continue
-		}
-		target = r.URL
-		if r.Tier > sel.Tier {
-			break
-		}
-	}
-	if target == "" {
-		m.collapsed[sel.Tier] = false // nothing else to land on
-		return m
-	}
-	m.cursor = target
+	m.collapsed[sel.Tier] = !m.collapsed[sel.Tier]
+	m.cursor = sel.URL
 	return m.fixCursor()
 }
 
@@ -325,6 +313,10 @@ func (m watchModel) act(k string) (watchModel, tea.Cmd) {
 	sel, ok := m.selected()
 	if !ok {
 		m.status = "no PR selected"
+		return m, nil
+	}
+	if m.collapsed[sel.Tier] && k[0] >= 'a' && k[0] <= 'z' {
+		m.status = "category is folded — press enter to unfold"
 		return m, nil
 	}
 	m.status = ""
