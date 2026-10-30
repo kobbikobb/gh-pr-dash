@@ -227,7 +227,7 @@ func TestStatusColumn(t *testing.T) {
 		for tier := tierNeedsAction; tier <= tierMerged; tier++ {
 			for _, queue := range []string{"", "UNMERGEABLE", "QUEUED"} {
 				for _, ci := range []string{"ok", "fail"} {
-					code := statusFor(tier, ci, "conflict", queue)
+					code := statusFor(tier, ci, "conflict", "none", queue)
 					if _, ok := statuses[code]; !ok {
 						t.Errorf("no theme entry for status %q", code)
 					}

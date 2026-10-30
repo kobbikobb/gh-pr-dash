@@ -17,7 +17,7 @@ const (
 
 // statusOrder is the legend order, most urgent first.
 var statusOrder = []string{
-	"queue_failed", "ci_failed", "conflict", "comments", "ready", "queued",
+	"queue_failed", "ci_failed", "conflict", "changes", "comments", "ready", "queued",
 	"building", "no_reviewer", "in_review", "draft", "merged",
 }
 

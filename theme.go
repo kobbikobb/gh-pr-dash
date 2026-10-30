@@ -20,7 +20,7 @@ type category struct {
 // Icons are emoji that are two cells wide without a variation selector, so
 // terminals agree on their width.
 var categories = []category{
-	{"Needs action", "PRs with failing checks, conflicts, comments or a rejected queue entry", "🚨", func(p palette) string { return p.r }, "Please review and take action on PRs that need attention (CI failures, conflicts, unresolved comments):"},
+	{"Needs action", "PRs with failing checks, conflicts, requested changes, comments or a rejected queue entry", "🚨", func(p palette) string { return p.r }, "Please review and take action on PRs that need attention (CI failures, conflicts, requested changes, unresolved comments):"},
 	{"Ready to merge", "Approved, passing checks, clean, not blocked", "✅", func(p palette) string { return p.g }, "Please review and merge ready PRs (approved, green, no conflicts):"},
 	{"In progress", "Approved, but CI pending or running, or in the merge queue", "⏳", func(p palette) string { return p.y }, "Please monitor PRs waiting on CI or in the merge queue:"},
 	{"Needs reviewer", "Nobody asked for or reviewed yet", "🙋", func(p palette) string { return p.y }, "Please find reviewers for PRs with no reviewer:"},
@@ -40,6 +40,7 @@ var statuses = map[string]statusInfo{
 	"queue_failed": {"🚫", "Queue failed", func(p palette) string { return p.r }},
 	"ci_failed":    {"❌", "CI failed", func(p palette) string { return p.r }},
 	"conflict":     {"💥", "Conflicts", func(p palette) string { return p.r }},
+	"changes":      {"🔧", "Changes requested", func(p palette) string { return p.r }},
 	"comments":     {"💬", "Comments", func(p palette) string { return p.r }},
 	"ready":        {"✅", "Ready", func(p palette) string { return p.g }},
 	"queued":       {"🚦", "Queued", func(p palette) string { return p.y }},
