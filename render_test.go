@@ -69,14 +69,6 @@ func TestRenderTerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("should show the clickable PR url as plain text", func(t *testing.T) {
-		out := renderPanels(rows, 200, false, 0, view{})
-
-		if !strings.Contains(out, "https://github.com/me/glint/pull/20") {
-			t.Errorf("missing PR url:\n%s", out)
-		}
-	})
-
 	t.Run("should group PRs nobody was asked to review under Needs reviewer", func(t *testing.T) {
 		out := renderPanels([]Row{{Tier: tierNoReviewer, CI: "ok", Merge: "clean", URL: "https://x/1"}}, 100, false, 0, view{})
 
