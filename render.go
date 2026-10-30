@@ -11,6 +11,9 @@ import (
 // idleW fits "14:32" for merged rows and "14d" for open rows.
 const idleW = 5
 
+// copilotMark trails the title of PRs Copilot has reviewed.
+const copilotMark = " 🤖"
+
 type palette struct{ b, d, r, g, y, c, z string }
 
 func colors(on bool) palette {
@@ -153,6 +156,9 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 			t += " (" + strconv.Itoa(r.Comments) + ")"
 		}
 		titles[i] = t
+		if r.Copilot {
+			t += copilotMark
+		}
 		if n := runewidth.StringWidth(t); n > longest {
 			longest = n
 		}
@@ -206,7 +212,11 @@ func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) st
 		if v.collapsed[tier] {
 			continue
 		}
-		title := padRight(truncate(titles[i], titleW), titleW)
+		title := truncate(titles[i], titleW)
+		if r.Copilot {
+			title = truncate(titles[i], titleW-runewidth.StringWidth(copilotMark)) + copilotMark
+		}
+		title = padRight(title, titleW)
 		if selected {
 			title = p.b + title + p.z
 		}

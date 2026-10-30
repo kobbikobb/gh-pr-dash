@@ -315,6 +315,23 @@ func TestPanelsWithView(t *testing.T) {
 		}
 	})
 
+	t.Run("should trail Copilot-reviewed titles with a marker and keep alignment", func(t *testing.T) {
+		long := []Row{
+			{Tier: tierReady, Status: "ready", Repository: "api", Title: strings.Repeat("long ", 30), URL: "u1", Copilot: true},
+			{Tier: tierReady, Status: "ready", Repository: "api", Title: "Fine", URL: "u2"},
+		}
+		out := renderPanels(long, 100, false, 0, view{})
+
+		if strings.Count(out, "🤖") != 1 {
+			t.Errorf("want one marker:\n%s", out)
+		}
+		for _, l := range strings.Split(out, "\n") {
+			if strings.Contains(l, "│") && runewidth.StringWidth(l) != 100 {
+				t.Errorf("misaligned (%d): %q", runewidth.StringWidth(l), l)
+			}
+		}
+	})
+
 	t.Run("should fold a category to its border and keep the box aligned", func(t *testing.T) {
 		out := renderPanels(rows, 100, false, 0, view{collapsed: map[int]bool{tierNeedsAction: true}, interactive: true})
 

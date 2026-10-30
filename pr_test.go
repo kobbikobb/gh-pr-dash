@@ -508,3 +508,20 @@ func TestStatusFor(t *testing.T) {
 		})
 	}
 }
+
+func TestCopilotReviewed(t *testing.T) {
+	review := func(login string) ghPR {
+		return prWith(func(p *ghPR) {
+			p.LatestReviews.Nodes = []struct {
+				Author struct{ Login string }
+			}{{Author: struct{ Login string }{login}}}
+		})
+	}
+
+	if !classify(review("copilot-pull-request-reviewer"), time.Now()).Copilot {
+		t.Error("Copilot's review should be flagged")
+	}
+	if classify(review("alice"), time.Now()).Copilot {
+		t.Error("a human review should not be flagged")
+	}
+}

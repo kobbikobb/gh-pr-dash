@@ -68,6 +68,7 @@ type Row struct {
 	URL        string     `json:"url"`
 	Comments   int        `json:"comments"`
 	Unresolved int        `json:"unresolved_threads"`
+	Copilot    bool       `json:"copilot_reviewed"`
 	QueuePos   int        `json:"queue_position,omitempty"`
 	Title      string     `json:"title"`
 	MergedAt   *time.Time `json:"merged_at,omitempty"`
@@ -176,6 +177,16 @@ func hasReviewer(pr ghPR) bool {
 	return false
 }
 
+// copilotReviewed reports whether Copilot's code reviewer left a review.
+func copilotReviewed(pr ghPR) bool {
+	for _, r := range pr.LatestReviews.Nodes {
+		if strings.Contains(strings.ToLower(r.Author.Login), "copilot") {
+			return true
+		}
+	}
+	return false
+}
+
 // queueState is the merge-queue entry state, or "" when the PR isn't queued.
 func queueState(pr ghPR) string {
 	if pr.MergeQueueEntry == nil {
@@ -273,6 +284,7 @@ func classify(pr ghPR, now time.Time) Row {
 		Status:     statusFor(tier, ci, merge, review, queueState(pr)),
 		QueuePos:   queuePos,
 		Unresolved: unresolved,
+		Copilot:    copilotReviewed(pr),
 		IdleDays:   int(now.Sub(pr.UpdatedAt).Hours() / 24),
 		CI:         ci,
 		Merge:      merge,
