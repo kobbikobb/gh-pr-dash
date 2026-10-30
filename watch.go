@@ -469,6 +469,8 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 	case opts.asJSON:
 	case len(rows) == 0 && errMsg == "" && status == "":
 		out += p.d + "  loading…" + p.z + "\n"
+	case len(rows) == 0 && errMsg != "":
+		out += p.d + "  will retry on the next refresh" + p.z + "\n"
 	default:
 		filtered := filterRows(rows, opts.repo)
 		if opts.repo != "" && len(filtered) == 0 {

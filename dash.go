@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -66,7 +67,14 @@ func fetchPRs(query string, limit int) ([]ghPR, int, error) {
 		}
 	}
 	vars := map[string]any{"q": query, "n": limit}
-	if err := client.Do(searchQuery, vars, &resp); err != nil {
+	// GitHub's GraphQL endpoint times out now and then; retry gateway errors.
+	for attempt := 0; attempt < 3; attempt++ {
+		if err = client.Do(searchQuery, vars, &resp); err == nil || !isGatewayError(err) {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * time.Second)
+	}
+	if err != nil {
 		return nil, 0, err
 	}
 	return resp.Search.Nodes, resp.Search.IssueCount, nil
@@ -133,4 +141,12 @@ func fetchAndRender(w io.Writer, opts options) error {
 	}
 	_, err = fmt.Fprint(w, indent(header+renderTerminal(filtered, inner, t.useColor, total), m))
 	return err
+}
+
+func isGatewayError(err error) bool {
+	var httpErr *api.HTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode >= 502 && httpErr.StatusCode <= 504
+	}
+	return false
 }
