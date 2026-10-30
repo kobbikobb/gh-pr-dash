@@ -313,3 +313,18 @@ func TestScopeLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestSidebarOnlyOnWideTerminals(t *testing.T) {
+	rows := []Row{
+		{Tier: tierNeedsAction, Status: "ci_failed", Repository: "api", Title: "Broken", URL: "u1"},
+		{Tier: tierReady, Status: "ready", Repository: "api", Title: "Fine", URL: "u2"},
+	}
+	wide := renderWatch(options{}, 0, rows, 0, "", "x", "FOOT", terminal{width: 160, height: 60, useColor: true}, view{})
+	if !strings.Contains(wide, "Legend") || !strings.Contains(wide, "Categories") {
+		t.Fatalf("wide terminal should show the legend:\n%s", wide)
+	}
+	narrow := renderWatch(options{}, 0, rows, 0, "", "x", "FOOT", terminal{width: 100, height: 60}, view{})
+	if strings.Contains(narrow, "Legend") {
+		t.Errorf("narrow terminal should hide the legend:\n%s", narrow)
+	}
+}

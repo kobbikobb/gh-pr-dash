@@ -17,7 +17,7 @@
 
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
-Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), and title (with comment count). Press `o` to open the PR.
+On terminals 130+ columns wide a legend sidebar lists the status icons and per-category counts. Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), and title (with comment count). Press `o` to open the PR.
 
 ## Install
 
