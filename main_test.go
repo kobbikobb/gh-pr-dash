@@ -38,11 +38,11 @@ func TestParseArgs(t *testing.T) {
 		}
 	})
 
-	t.Run("should reject --watch combined with --json", func(t *testing.T) {
-		_, ok := parseArgs([]string{"--watch", "--json"})
+	t.Run("should still accept the legacy --watch flag", func(t *testing.T) {
+		o, ok := parseArgs([]string{"--watch"})
 
-		if ok {
-			t.Error("expected rejection")
+		if !ok || o.asJSON {
+			t.Errorf("ok=%v asJSON=%v, want accepted with the dashboard as default", ok, o.asJSON)
 		}
 	})
 

@@ -493,7 +493,7 @@ func renderWatch(opts options, tick int, rows []Row, mergedTotal int, errMsg, st
 	if status != "" {
 		right += " · " + status
 	}
-	out := renderHeader(tick, true, t.useColor, inner, t.height, headerInfo{left: scopeLabel(opts), right: right})
+	out := renderHeader(tick, t.useColor, inner, t.height, headerInfo{left: scopeLabel(opts), right: right})
 	if errMsg != "" {
 		out += p.r + "  ⚠ " + errMsg + p.z + "\n\n"
 	}

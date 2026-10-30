@@ -106,24 +106,19 @@ func headTitle(tier int, counts []int, mergedShown int) string {
 	return fmt.Sprintf("%s (%d) %s", c.name, count, c.icon)
 }
 
-// renderTerminal produces the aligned, grouped table. mergedTotal is the real
-// count of PRs merged today (from the search issueCount), so the merged
-// heading can state the total even when only mergedLimit rows are listed.
-// Padding is applied to the plain text before color so ANSI escapes never
-// throw off column widths.
-func renderTerminal(rows []Row, width int, color bool, mergedTotal int) string {
-	return renderPanels(rows, width, color, mergedTotal, view{})
-}
-
 // view is the interactive state a render needs: which row the cursor is on
 // (by URL, so it survives refreshes) and which categories are folded away.
-// The zero value renders the plain one-shot table.
 type view struct {
 	cursor      string
 	collapsed   map[int]bool
 	interactive bool
 }
 
+// renderPanels produces the aligned, grouped panels. mergedTotal is the real
+// count of PRs merged today (from the search issueCount), so the merged
+// heading can state the total even when only mergedLimit rows are listed.
+// Padding is applied to the plain text before color so ANSI escapes never
+// throw off column widths.
 func renderPanels(rows []Row, width int, color bool, mergedTotal int, v view) string {
 	if len(rows) == 0 {
 		return "No open PRs.\n"

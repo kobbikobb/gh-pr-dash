@@ -17,16 +17,7 @@
 
 No LLM, no config, no state — deterministic, and ships as one precompiled binary.
 
-```
-Needs action (2) 🚨  PRs with failing checks, conflicts, comments or a rejected queue entry
-  ✗ clean    conflict     1d api   extract idle watchdog into run-watchdog    https://github.com/me/api/pull/1008
-  ✗ clean    clean        2d api   map user_id from transactions to goaml (1) https://github.com/me/api/pull/12442
-
-Ready to merge (1) ✅  Approved, passing checks, clean, not blocked
-  ✓ clean    clean        2d api   Validate regulator config on save (1)       https://github.com/me/api/pull/12385
-```
-
-Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL — plain text so it stays cmd-clickable, even through tmux.
+Each category is a bordered panel with its icon, count and a one-line description. Each row: a **status** icon and label (e.g. `❌ CI failed`, `💥 Conflicts`, `🚦 Queued #2`, `✅ Ready`), **repo**, **idle** days (or the merge time for merged rows), title (with comment count), and the full PR URL.
 
 ## Install
 
@@ -39,14 +30,14 @@ Requires [`gh`](https://cli.github.com), authenticated (`gh auth login`) — the
 ## Use
 
 ```bash
-gh pr-dash               # all your open PRs, ranked
-gh pr-dash --org my-org  # scope to one org/owner
-gh pr-dash --json        # raw JSON rows (for scripts)
-gh pr-dash 50            # cap at 50 PRs (default 100)
-gh pr-dash --watch       # interactive dashboard, refreshes every minute
+gh pr-dash                  # live dashboard, refreshes every minute
+gh pr-dash --org my-org     # scope to one org/owner
+gh pr-dash --interval 30s   # refresh interval
+gh pr-dash 50               # cap at 50 PRs (default 100)
+gh pr-dash --json           # print raw JSON rows once and exit (for scripts)
 ```
 
-### Watch mode keys
+### Keys
 
 A cursor (`❯`) marks the selected PR. Lowercase keys act on it; the capital version acts on every PR in its category.
 
